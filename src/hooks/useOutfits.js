@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
   onSnapshot,
   query,
   serverTimestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../firebase";
@@ -68,11 +71,25 @@ export function useOutfits() {
     await deleteDoc(doc(db, "outfits", outfitId));
   }, []);
 
+  const scheduleOutfit = useCallback(async (outfitId, dateISO) => {
+    await updateDoc(doc(db, "outfits", outfitId), {
+      scheduledDates: arrayUnion(dateISO),
+    });
+  }, []);
+
+  const unscheduleOutfit = useCallback(async (outfitId, dateISO) => {
+    await updateDoc(doc(db, "outfits", outfitId), {
+      scheduledDates: arrayRemove(dateISO),
+    });
+  }, []);
+
   return {
     outfits,
     loading,
     error,
     addOutfit,
     deleteOutfit,
+    scheduleOutfit,
+    unscheduleOutfit,
   };
 }

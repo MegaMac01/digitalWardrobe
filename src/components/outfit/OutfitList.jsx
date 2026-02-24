@@ -25,6 +25,7 @@ import {
   VIBE_OPTIONS,
 } from "../../utils/outfitEngine";
 import OutfitCard from "./OutfitCard";
+import OutfitCalendar from "./OutfitCalendar";
 
 function buildSuggestionCardData(suggestion, weather) {
   return {
@@ -32,6 +33,7 @@ function buildSuggestionCardData(suggestion, weather) {
     id: "suggestion",
     name: buildOutfitName(suggestion.vibe, weather),
     itemIdsByType: suggestion.itemIdsByType,
+    previewOrder: suggestion.previewOrder,
     weatherSnapshot: weather ?? null,
     notes: "Generated from current vibe and weather.",
   };
@@ -39,7 +41,15 @@ function buildSuggestionCardData(suggestion, weather) {
 
 export default function OutfitList() {
   const { clothes, loading: loadingClothes } = useClothes();
-  const { outfits, loading: loadingOutfits, addOutfit, deleteOutfit } = useOutfits();
+  const {
+    outfits,
+    loading: loadingOutfits,
+    error: outfitsError,
+    addOutfit,
+    deleteOutfit,
+    scheduleOutfit,
+    unscheduleOutfit,
+  } = useOutfits();
   const { weather, loading: loadingWeather, error: weatherError, refresh } = useWeather();
 
   const [vibe, setVibe] = useState("Any");
@@ -83,6 +93,7 @@ export default function OutfitList() {
         notes: "Auto-generated outfit.",
         vibe,
         itemIdsByType: suggestion.itemIdsByType,
+        previewOrder: suggestion.previewOrder || TYPE_ORDER.filter((type) => suggestion.itemIdsByType[type]),
         weatherSnapshot: weather ?? null,
         source: "auto",
       });
@@ -94,6 +105,28 @@ export default function OutfitList() {
 
   if (loadingClothes || loadingOutfits) {
     return <Loader label="Loading outfits..." />;
+  }
+
+  async function handleSchedule(outfitId, dateISO) {
+    if (!dateISO) {
+      setToast({ open: true, message: "Pick a valid date.", severity: "warning" });
+      return;
+    }
+    try {
+      await scheduleOutfit(outfitId, dateISO);
+      setToast({ open: true, message: `Scheduled for ${dateISO}.`, severity: "success" });
+    } catch {
+      setToast({ open: true, message: "Could not schedule outfit.", severity: "error" });
+    }
+  }
+
+  async function handleUnschedule(outfitId, dateISO) {
+    try {
+      await unscheduleOutfit(outfitId, dateISO);
+      setToast({ open: true, message: `Removed ${dateISO}.`, severity: "success" });
+    } catch {
+      setToast({ open: true, message: "Could not remove schedule.", severity: "error" });
+    }
   }
 
   return (
@@ -200,9 +233,16 @@ export default function OutfitList() {
         </Box>
       )}
 
+      <OutfitCalendar outfits={outfits} />
+
       <Typography variant="h5" sx={{ mb: 1.2 }}>
         Saved Outfits
       </Typography>
+      {outfitsError && (
+        <Alert severity="error" sx={{ mb: 1.5 }}>
+          {outfitsError}
+        </Alert>
+      )}
       {outfits.length === 0 ? (
         <Alert severity="info">No saved outfits yet. Generate one and save it.</Alert>
       ) : (
@@ -212,6 +252,9 @@ export default function OutfitList() {
               <OutfitCard
                 outfit={outfit}
                 clothesById={clothesById}
+                showScheduleActions
+                onSchedule={handleSchedule}
+                onUnschedule={handleUnschedule}
                 onDelete={async (id) => {
                   await deleteOutfit(id);
                   setToast({ open: true, message: "Outfit deleted.", severity: "success" });

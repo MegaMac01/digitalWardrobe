@@ -137,6 +137,8 @@ export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } =
     return acc;
   }, {});
 
+  const previewOrder = TYPE_ORDER.filter((type) => itemIdsByType[type]);
+
   const itemsByType = TYPE_ORDER.reduce((acc, type) => {
     acc[type] = selected[type] ?? null;
     return acc;
@@ -146,6 +148,7 @@ export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } =
     itemIdsByType,
     itemsByType,
     missingRequired,
+    previewOrder,
     vibe,
     generatedAt: Date.now(),
   };

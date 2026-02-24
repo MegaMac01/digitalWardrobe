@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
   Box,
@@ -11,6 +11,7 @@ import {
   Grid,
   IconButton,
   Stack,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -54,11 +55,20 @@ export default function OutfitCard({
   clothesById = {},
   onDelete,
   onSaveSuggestion,
+  onSchedule,
+  onUnschedule,
   showSaveAction = false,
+  showScheduleActions = false,
 }) {
+  const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().slice(0, 10));
   const items = outfit.itemIdsByType || outfit.items || {};
+  const scheduledDates = useMemo(
+    () => [...(outfit.scheduledDates || [])].sort((a, b) => a.localeCompare(b)),
+    [outfit.scheduledDates]
+  );
 
-  const pieceTypes = TYPE_ORDER.filter((type) => items[type]);
+  const orderedTypes = outfit.previewOrder?.length ? outfit.previewOrder : TYPE_ORDER;
+  const pieceTypes = orderedTypes.filter((type) => items[type]);
   const displayTypes = pieceTypes.length > 0 ? pieceTypes : TYPE_ORDER;
 
   return (
@@ -82,6 +92,24 @@ export default function OutfitCard({
             {outfit.notes}
           </Typography>
         )}
+        {scheduledDates.length > 0 && (
+          <Stack direction="row" spacing={0.7} sx={{ mt: 1, flexWrap: "wrap", rowGap: 0.8 }}>
+            {scheduledDates.map((dateISO) => (
+              <Chip
+                key={dateISO}
+                size="small"
+                label={dateISO}
+                color="warning"
+                variant="outlined"
+                onDelete={
+                  showScheduleActions && onUnschedule
+                    ? () => onUnschedule(outfit.id, dateISO)
+                    : undefined
+                }
+              />
+            ))}
+          </Stack>
+        )}
       </CardContent>
       <CardContent sx={{ pt: 0, flexGrow: 1 }}>
         <Grid container spacing={1}>
@@ -97,6 +125,21 @@ export default function OutfitCard({
           <Button size="small" variant="contained" onClick={onSaveSuggestion}>
             Save This Fit
           </Button>
+        )}
+        {showScheduleActions && onSchedule && (
+          <>
+            <TextField
+              size="small"
+              type="date"
+              value={scheduleDate}
+              onChange={(event) => setScheduleDate(event.target.value)}
+              sx={{ maxWidth: 155 }}
+              InputLabelProps={{ shrink: true }}
+            />
+            <Button size="small" variant="outlined" onClick={() => onSchedule(outfit.id, scheduleDate)}>
+              Schedule
+            </Button>
+          </>
         )}
         <Box sx={{ flexGrow: 1 }} />
         {onDelete && (

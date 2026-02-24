@@ -24,12 +24,31 @@ import {
   VIBE_OPTIONS,
 } from "../../utils/outfitEngine";
 
+function reorderTypes(order, draggingType, targetType) {
+  if (!draggingType || draggingType === targetType) {
+    return order;
+  }
+
+  const next = [...order];
+  const dragIndex = next.indexOf(draggingType);
+  const targetIndex = next.indexOf(targetType);
+  if (dragIndex < 0 || targetIndex < 0) {
+    return order;
+  }
+
+  next.splice(dragIndex, 1);
+  next.splice(targetIndex, 0, draggingType);
+  return next;
+}
+
 export default function OutfitBuilder() {
   const { clothes, groupedByType, loading } = useClothes();
   const { addOutfit } = useOutfits();
   const { weather } = useWeather();
 
   const [selected, setSelected] = useState({});
+  const [previewOrder, setPreviewOrder] = useState(TYPE_ORDER);
+  const [draggingType, setDraggingType] = useState(null);
   const [vibe, setVibe] = useState("Any");
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
@@ -52,6 +71,10 @@ export default function OutfitBuilder() {
   function handleAutoSuggest() {
     const suggestion = buildSuggestedOutfit(clothes, { vibe, weather });
     setSelected(suggestion.itemIdsByType);
+    if (suggestion.previewOrder?.length) {
+      const remaining = TYPE_ORDER.filter((type) => !suggestion.previewOrder.includes(type));
+      setPreviewOrder([...suggestion.previewOrder, ...remaining]);
+    }
     if (!name) {
       setName(buildOutfitName(vibe, weather));
     }
@@ -74,11 +97,14 @@ export default function OutfitBuilder() {
 
     setSaving(true);
     try {
+      const orderedPreview = previewOrder.filter((type) => selected[type]);
+
       await addOutfit({
         name: name.trim(),
         notes: notes.trim(),
         vibe,
         itemIdsByType: selected,
+        previewOrder: orderedPreview,
         weatherSnapshot: weather ?? null,
         source: "builder",
       });
@@ -211,10 +237,17 @@ export default function OutfitBuilder() {
         <Typography variant="h6" sx={{ mb: 1.2 }}>
           Preview
         </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Drag pieces to reorder how this outfit is displayed in saved cards.
+        </Typography>
         <Grid container spacing={1}>
-          {TYPE_ORDER.map((type) => (
+          {previewOrder.map((type) => (
             <Grid item xs={6} sm={4} md={2} key={type}>
-              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 0.5 }}
+              >
+                ::
                 {type}
               </Typography>
               {selectedItems[type] ? (
@@ -222,10 +255,35 @@ export default function OutfitBuilder() {
                   component="img"
                   image={selectedItems[type].imageUrl}
                   alt={type}
-                  sx={{ mt: 0.5, borderRadius: 1.2, aspectRatio: "1 / 1", objectFit: "cover" }}
+                  draggable
+                  onDragStart={() => setDraggingType(type)}
+                  onDragEnd={() => setDraggingType(null)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setPreviewOrder((prev) => reorderTypes(prev, draggingType, type));
+                    setDraggingType(null);
+                  }}
+                  sx={{
+                    mt: 0.5,
+                    borderRadius: 1.2,
+                    aspectRatio: "1 / 1",
+                    objectFit: "cover",
+                    cursor: "grab",
+                    opacity: draggingType === type ? 0.5 : 1,
+                  }}
                 />
               ) : (
                 <Box
+                  draggable
+                  onDragStart={() => setDraggingType(type)}
+                  onDragEnd={() => setDraggingType(null)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setPreviewOrder((prev) => reorderTypes(prev, draggingType, type));
+                    setDraggingType(null);
+                  }}
                   sx={{
                     mt: 0.5,
                     border: "1px dashed rgba(111,75,50,0.3)",
@@ -235,6 +293,8 @@ export default function OutfitBuilder() {
                     placeItems: "center",
                     color: "text.secondary",
                     fontSize: 12,
+                    cursor: "grab",
+                    opacity: draggingType === type ? 0.5 : 1,
                   }}
                 >
                   Empty
