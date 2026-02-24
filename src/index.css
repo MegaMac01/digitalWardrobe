@@ -1,0 +1,44 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Spectral:wght@400;500;600;700&display=swap");
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  font-family: "Spectral", "Georgia", serif;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(255, 242, 219, 0.45), transparent 35%),
+    radial-gradient(circle at 80% 8%, rgba(170, 120, 80, 0.12), transparent 30%),
+    linear-gradient(180deg, #f6eedc 0%, #f3e7cf 45%, #efdfc2 100%);
+  color: #2f241d;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(112, 84, 62, 0.06) 0,
+      rgba(112, 84, 62, 0.06) 1px,
+      transparent 1px,
+      transparent 8px
+    );
+}
+
+#root {
+  min-height: 100vh;
+  position: relative;
+}

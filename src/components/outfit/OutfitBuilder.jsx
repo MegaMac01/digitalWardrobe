@@ -1,0 +1,256 @@
+import React, { useMemo, useState } from "react";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardMedia,
+  Grid,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { useClothes } from "../../hooks/useClothes";
+import { useOutfits } from "../../hooks/useOutfits";
+import { useWeather } from "../../hooks/useWeather";
+import Loader from "../layout/Loader";
+import Toast from "../layout/Toast";
+import {
+  buildOutfitName,
+  buildSuggestedOutfit,
+  TYPE_ORDER,
+  VIBE_OPTIONS,
+} from "../../utils/outfitEngine";
+
+export default function OutfitBuilder() {
+  const { clothes, groupedByType, loading } = useClothes();
+  const { addOutfit } = useOutfits();
+  const { weather } = useWeather();
+
+  const [selected, setSelected] = useState({});
+  const [vibe, setVibe] = useState("Any");
+  const [name, setName] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
+
+  const selectedItems = useMemo(() => {
+    return TYPE_ORDER.reduce((acc, type) => {
+      acc[type] = clothes.find((item) => item.id === selected[type]) ?? null;
+      return acc;
+    }, {});
+  }, [clothes, selected]);
+
+  const missingRequired = ["Shirt", "Pants", "Shoes"].filter((type) => !selected[type]);
+
+  function handleSelect(type, itemId) {
+    setSelected((prev) => ({ ...prev, [type]: prev[type] === itemId ? null : itemId }));
+  }
+
+  function handleAutoSuggest() {
+    const suggestion = buildSuggestedOutfit(clothes, { vibe, weather });
+    setSelected(suggestion.itemIdsByType);
+    if (!name) {
+      setName(buildOutfitName(vibe, weather));
+    }
+  }
+
+  async function handleSave(event) {
+    event.preventDefault();
+    if (!name.trim()) {
+      setToast({ open: true, message: "Name your outfit first.", severity: "warning" });
+      return;
+    }
+    if (missingRequired.length > 0) {
+      setToast({
+        open: true,
+        message: `Pick ${missingRequired.join(", ")} before saving.`,
+        severity: "warning",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await addOutfit({
+        name: name.trim(),
+        notes: notes.trim(),
+        vibe,
+        itemIdsByType: selected,
+        weatherSnapshot: weather ?? null,
+        source: "builder",
+      });
+      setSelected({});
+      setName("");
+      setNotes("");
+      setToast({ open: true, message: "Outfit saved.", severity: "success" });
+    } catch {
+      setToast({ open: true, message: "Could not save outfit.", severity: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return <Loader />;
+  }
+
+  return (
+    <Box>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={1.2}
+        alignItems={{ xs: "stretch", md: "center" }}
+        sx={{ mb: 2 }}
+      >
+        <Typography variant="h4" sx={{ flexGrow: 1 }}>
+          Outfit Builder
+        </Typography>
+        <TextField
+          select
+          size="small"
+          label="Vibe"
+          value={vibe}
+          onChange={(event) => setVibe(event.target.value)}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="Any">Any</MenuItem>
+          {VIBE_OPTIONS.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </TextField>
+        <Button
+          variant="outlined"
+          startIcon={<AutoFixHighIcon />}
+          onClick={handleAutoSuggest}
+          disabled={clothes.length === 0}
+        >
+          Auto Pick
+        </Button>
+      </Stack>
+
+      {weather && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Weather cue: {Math.round(weather.temperature)}F, {weather.label}.
+        </Alert>
+      )}
+
+      <Grid container spacing={2}>
+        {TYPE_ORDER.map((type) => (
+          <Grid item xs={12} md={6} key={type}>
+            <Card sx={{ p: 1.2 }}>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                {type}
+              </Typography>
+              <Grid container spacing={1}>
+                {groupedByType[type]?.length ? (
+                  groupedByType[type].map((item) => (
+                    <Grid item xs={4} sm={3} key={item.id}>
+                      <Card
+                        onClick={() => handleSelect(type, item.id)}
+                        sx={{
+                          cursor: "pointer",
+                          overflow: "hidden",
+                          border:
+                            selected[type] === item.id
+                              ? "2px solid rgba(111,75,50,0.9)"
+                              : "1px solid transparent",
+                        }}
+                      >
+                        <CardMedia
+                          component="img"
+                          image={item.imageUrl}
+                          alt={item.type}
+                          sx={{ aspectRatio: "1 / 1", objectFit: "cover" }}
+                        />
+                      </Card>
+                    </Grid>
+                  ))
+                ) : (
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="text.secondary">
+                      No {type.toLowerCase()} items yet.
+                    </Typography>
+                  </Grid>
+                )}
+              </Grid>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Card component="form" onSubmit={handleSave} sx={{ mt: 3, p: 2 }}>
+        <Typography variant="h5" sx={{ mb: 1 }}>
+          Save This Outfit
+        </Typography>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
+          <TextField
+            label="Outfit Name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            fullWidth
+            required
+          />
+          <TextField
+            label="Notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            fullWidth
+          />
+          <Button type="submit" variant="contained" disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </Stack>
+      </Card>
+
+      <Card sx={{ mt: 2.2, p: 2 }}>
+        <Typography variant="h6" sx={{ mb: 1.2 }}>
+          Preview
+        </Typography>
+        <Grid container spacing={1}>
+          {TYPE_ORDER.map((type) => (
+            <Grid item xs={6} sm={4} md={2} key={type}>
+              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                {type}
+              </Typography>
+              {selectedItems[type] ? (
+                <CardMedia
+                  component="img"
+                  image={selectedItems[type].imageUrl}
+                  alt={type}
+                  sx={{ mt: 0.5, borderRadius: 1.2, aspectRatio: "1 / 1", objectFit: "cover" }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    mt: 0.5,
+                    border: "1px dashed rgba(111,75,50,0.3)",
+                    borderRadius: 1.2,
+                    aspectRatio: "1 / 1",
+                    display: "grid",
+                    placeItems: "center",
+                    color: "text.secondary",
+                    fontSize: 12,
+                  }}
+                >
+                  Empty
+                </Box>
+              )}
+            </Grid>
+          ))}
+        </Grid>
+      </Card>
+
+      <Toast
+        open={toast.open}
+        message={toast.message}
+        severity={toast.severity}
+        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+      />
+    </Box>
+  );
+}
