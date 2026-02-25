@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import { Box, Card, CardContent, Chip, IconButton, Stack, Typography } from "@mui/material";
+import { Alert, Box, Card, CardContent, Chip, IconButton, Stack, Typography } from "@mui/material";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -30,11 +30,13 @@ function buildScheduleMap(outfits) {
   return map;
 }
 
-export default function OutfitCalendar({ outfits }) {
+export default function OutfitCalendar({ outfits, onReschedule }) {
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  const [dragPayload, setDragPayload] = useState(null);
+  const [tapMovePayload, setTapMovePayload] = useState(null);
 
   const scheduleMap = useMemo(() => buildScheduleMap(outfits), [outfits]);
   const year = cursor.getFullYear();
@@ -59,6 +61,16 @@ export default function OutfitCalendar({ outfits }) {
     });
   }, [daysInMonth, firstDayIndex, month, scheduleMap, year]);
 
+  const conflictCount = cells.reduce((count, cell) => {
+    if (!cell.day) return count;
+    return cell.outfits.length > 1 ? count + 1 : count;
+  }, 0);
+
+  async function moveOutfit(payload, nextDateISO) {
+    if (!payload || !nextDateISO || payload.fromDate === nextDateISO || !onReschedule) return;
+    await onReschedule(payload.outfitId, payload.fromDate, nextDateISO);
+  }
+
   return (
     <Card sx={{ mb: 2.6 }}>
       <CardContent>
@@ -79,6 +91,16 @@ export default function OutfitCalendar({ outfits }) {
             <ChevronRightIcon />
           </IconButton>
         </Stack>
+        {tapMovePayload && (
+          <Alert severity="info" sx={{ mb: 1.2 }}>
+            Move mode: tap a day to move this outfit from {tapMovePayload.fromDate}.
+          </Alert>
+        )}
+        {conflictCount > 0 && (
+          <Alert severity="warning" sx={{ mb: 1.2 }}>
+            {conflictCount} day{conflictCount > 1 ? "s" : ""} with scheduling conflicts.
+          </Alert>
+        )}
 
         <Box
           sx={{
@@ -99,13 +121,39 @@ export default function OutfitCalendar({ outfits }) {
           {cells.map((cell) => (
             <Box
               key={cell.key}
+              onDragOver={(event) => {
+                if (cell.isoDate) event.preventDefault();
+              }}
+              onDrop={async (event) => {
+                event.preventDefault();
+                const raw = event.dataTransfer.getData("application/json");
+                let payload = dragPayload;
+                if (raw) {
+                  try {
+                    payload = JSON.parse(raw);
+                  } catch {
+                    payload = dragPayload;
+                  }
+                }
+                await moveOutfit(payload, cell.isoDate);
+                setDragPayload(null);
+                setTapMovePayload(null);
+              }}
+              onClick={async () => {
+                if (!tapMovePayload || !cell.isoDate) return;
+                await moveOutfit(tapMovePayload, cell.isoDate);
+                setTapMovePayload(null);
+              }}
               sx={{
                 minHeight: 88,
                 borderRadius: 1.4,
-                border: "1px solid rgba(111,75,50,0.18)",
+                border: "1px solid",
+                borderColor:
+                  cell.outfits.length > 1 ? "warning.main" : "rgba(111,75,50,0.18)",
                 bgcolor: cell.day ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.18)",
                 p: 0.7,
                 overflow: "hidden",
+                cursor: tapMovePayload && cell.isoDate ? "pointer" : "default",
               }}
             >
               {cell.day && (
@@ -119,7 +167,24 @@ export default function OutfitCalendar({ outfits }) {
                         key={`${cell.key}-${outfit.id}`}
                         size="small"
                         label={outfit.name}
-                        variant="outlined"
+                        variant={cell.outfits.length > 1 ? "filled" : "outlined"}
+                        color={cell.outfits.length > 1 ? "warning" : "default"}
+                        draggable
+                        onDragStart={(event) => {
+                          const payload = { outfitId: outfit.id, fromDate: cell.isoDate };
+                          event.dataTransfer.setData("application/json", JSON.stringify(payload));
+                          setDragPayload(payload);
+                        }}
+                        onDragEnd={() => setDragPayload(null)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setTapMovePayload((current) => {
+                            if (current?.outfitId === outfit.id && current.fromDate === cell.isoDate) {
+                              return null;
+                            }
+                            return { outfitId: outfit.id, fromDate: cell.isoDate };
+                          });
+                        }}
                         sx={{ height: 20, justifyContent: "flex-start" }}
                       />
                     ))}

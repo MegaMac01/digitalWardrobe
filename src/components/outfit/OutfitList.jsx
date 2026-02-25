@@ -26,6 +26,9 @@ import {
 } from "../../utils/outfitEngine";
 import OutfitCard from "./OutfitCard";
 import OutfitCalendar from "./OutfitCalendar";
+import OutfitAgenda from "./OutfitAgenda";
+import { isISODate } from "../../utils/validation";
+import { logClientError } from "../../utils/telemetry";
 
 function buildSuggestionCardData(suggestion, weather) {
   return {
@@ -36,7 +39,19 @@ function buildSuggestionCardData(suggestion, weather) {
     previewOrder: suggestion.previewOrder,
     weatherSnapshot: weather ?? null,
     notes: "Generated from current vibe and weather.",
+    whyItWorks: suggestion.whyItWorks || [],
   };
+}
+
+function buildScheduleMap(outfits) {
+  const map = {};
+  outfits.forEach((outfit) => {
+    (outfit.scheduledDates || []).forEach((dateISO) => {
+      if (!map[dateISO]) map[dateISO] = [];
+      map[dateISO].push(outfit.id);
+    });
+  });
+  return map;
 }
 
 export default function OutfitList() {
@@ -55,6 +70,7 @@ export default function OutfitList() {
   const [vibe, setVibe] = useState("Any");
   const [suggestion, setSuggestion] = useState(null);
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
+  const scheduleMap = useMemo(() => buildScheduleMap(outfits), [outfits]);
 
   const clothesById = useMemo(() => {
     const map = {};
@@ -99,6 +115,7 @@ export default function OutfitList() {
       });
       setToast({ open: true, message: "Suggested outfit saved.", severity: "success" });
     } catch {
+      logClientError("Failed to save suggested outfit", { scope: "outfits", action: "save-suggestion" });
       setToast({ open: true, message: "Could not save suggestion.", severity: "error" });
     }
   }
@@ -108,14 +125,23 @@ export default function OutfitList() {
   }
 
   async function handleSchedule(outfitId, dateISO) {
-    if (!dateISO) {
+    if (!isISODate(dateISO)) {
       setToast({ open: true, message: "Pick a valid date.", severity: "warning" });
       return;
     }
     try {
+      const conflicts = (scheduleMap[dateISO] || []).filter((id) => id !== outfitId).length;
       await scheduleOutfit(outfitId, dateISO);
-      setToast({ open: true, message: `Scheduled for ${dateISO}.`, severity: "success" });
-    } catch {
+      setToast({
+        open: true,
+        message:
+          conflicts > 0
+            ? `Scheduled for ${dateISO} with ${conflicts} existing outfit conflict${conflicts > 1 ? "s" : ""}.`
+            : `Scheduled for ${dateISO}.`,
+        severity: conflicts > 0 ? "warning" : "success",
+      });
+    } catch (error) {
+      logClientError(error, { scope: "outfits", action: "schedule", metadata: { outfitId, dateISO } });
       setToast({ open: true, message: "Could not schedule outfit.", severity: "error" });
     }
   }
@@ -124,8 +150,34 @@ export default function OutfitList() {
     try {
       await unscheduleOutfit(outfitId, dateISO);
       setToast({ open: true, message: `Removed ${dateISO}.`, severity: "success" });
-    } catch {
+    } catch (error) {
+      logClientError(error, { scope: "outfits", action: "unschedule", metadata: { outfitId, dateISO } });
       setToast({ open: true, message: "Could not remove schedule.", severity: "error" });
+    }
+  }
+
+  async function handleReschedule(outfitId, fromDate, toDate) {
+    if (!isISODate(fromDate) || !isISODate(toDate) || fromDate === toDate) return;
+    try {
+      await scheduleOutfit(outfitId, toDate);
+      await unscheduleOutfit(outfitId, fromDate);
+
+      const conflicts = (scheduleMap[toDate] || []).filter((id) => id !== outfitId).length;
+      setToast({
+        open: true,
+        message:
+          conflicts > 0
+            ? `Moved to ${toDate}. Warning: ${conflicts} outfit conflict${conflicts > 1 ? "s" : ""} on that day.`
+            : `Moved from ${fromDate} to ${toDate}.`,
+        severity: conflicts > 0 ? "warning" : "success",
+      });
+    } catch (error) {
+      logClientError(error, {
+        scope: "outfits",
+        action: "reschedule",
+        metadata: { outfitId, fromDate, toDate },
+      });
+      setToast({ open: true, message: "Could not move scheduled outfit.", severity: "error" });
     }
   }
 
@@ -215,17 +267,11 @@ export default function OutfitList() {
                   <li>
                     <Typography variant="body2">Vibe set to {vibe}.</Typography>
                   </li>
-                  <li>
-                    <Typography variant="body2">
-                      Weather-aware picks for {weather ? `${Math.round(weather.temperature)}F` : "any"}
-                      .
-                    </Typography>
-                  </li>
-                  <li>
-                    <Typography variant="body2">
-                      Required pieces covered: {TYPE_ORDER.slice(0, 3).join(", ")}.
-                    </Typography>
-                  </li>
+                  {(suggestion.whyItWorks || []).map((reason) => (
+                    <li key={reason}>
+                      <Typography variant="body2">{reason}</Typography>
+                    </li>
+                  ))}
                 </Box>
               </Card>
             </Grid>
@@ -233,7 +279,8 @@ export default function OutfitList() {
         </Box>
       )}
 
-      <OutfitCalendar outfits={outfits} />
+      <OutfitAgenda outfits={outfits} onUnschedule={handleUnschedule} />
+      <OutfitCalendar outfits={outfits} onReschedule={handleReschedule} />
 
       <Typography variant="h5" sx={{ mb: 1.2 }}>
         Saved Outfits

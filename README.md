@@ -13,9 +13,14 @@ A React + Firebase wardrobe app for:
   - Type, color, seasons, vibes, warmth, rain-friendly, favorite, notes
 - Filterable wardrobe gallery
 - Manual outfit builder with auto-pick assist
-- Weather + vibe outfit suggestions (Open-Meteo)
+- Weather + vibe outfit suggestions (Open-Meteo) with explanation hints
 - Saved outfits with delete support
+- Weekly agenda + month calendar scheduling
+- Drag-and-drop reschedule on calendar
+- Drag-and-drop preview ordering with touch button fallback
+- Client-side error telemetry (`client_errors` Firestore collection)
 - Vintage-inspired UI theme tuned for desktop + mobile
+- PWA support (installable + offline shell cache)
 
 ## Tech Stack
 
@@ -52,3 +57,6 @@ Recommended `.env.local` keys:
 
 - Weather suggestions use browser geolocation and Open-Meteo.
 - If location is blocked, manual and vibe-based suggestions still work.
+- Security rules are included in:
+  - `firestore.rules`
+  - `storage.rules`

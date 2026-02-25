@@ -17,6 +17,8 @@ import {
 } from "@mui/material";
 import { useClothes } from "../../hooks/useClothes";
 import { SEASON_OPTIONS, TYPE_ORDER, VIBE_OPTIONS } from "../../utils/outfitEngine";
+import { logClientError } from "../../utils/telemetry";
+import { sanitizeText, validateImageFile } from "../../utils/validation";
 
 function makeEmptyForm() {
   return {
@@ -51,8 +53,9 @@ export default function ClothingUploader() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (!file) {
-      setError("Please upload a clothing image.");
+    const fileError = validateImageFile(file);
+    if (fileError) {
+      setError(fileError);
       return;
     }
     if (!form.type) {
@@ -66,12 +69,13 @@ export default function ClothingUploader() {
       await addClothing({
         file,
         ...form,
-        color: form.color.trim(),
-        notes: form.notes.trim(),
+        color: sanitizeText(form.color, 40),
+        notes: sanitizeText(form.notes, 280),
       });
       setFile(null);
       setForm(makeEmptyForm());
-    } catch {
+    } catch (uploadError) {
+      logClientError(uploadError, { scope: "clothes", action: "upload-item" });
       setError("Upload failed. Try again.");
     } finally {
       setSubmitting(false);
@@ -113,6 +117,8 @@ export default function ClothingUploader() {
                 component="img"
                 src={previewUrl}
                 alt="Preview"
+                loading="lazy"
+                decoding="async"
                 sx={{ width: "100%", maxHeight: 280, objectFit: "cover", borderRadius: 2 }}
               />
             )}

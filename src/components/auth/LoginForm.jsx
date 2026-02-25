@@ -11,6 +11,8 @@ import {
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import GoogleSignInButton from "./GoogleSignInButton";
 import { useAuth } from "../../hooks/useAuth";
+import { isValidEmail } from "../../utils/validation";
+import { logClientError } from "../../utils/telemetry";
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
@@ -22,12 +24,17 @@ export default function LoginForm() {
 
   async function handleLogin(event) {
     event.preventDefault();
+    if (!isValidEmail(email)) {
+      setError("Enter a valid email address.");
+      return;
+    }
     setError("");
     setSubmitting(true);
     try {
       await login(email, password);
       navigate("/", { replace: true });
-    } catch {
+    } catch (authError) {
+      logClientError(authError, { scope: "auth", action: "login" });
       setError("Unable to sign in. Please check your credentials.");
     } finally {
       setSubmitting(false);
@@ -40,7 +47,8 @@ export default function LoginForm() {
     try {
       await signInWithGoogle();
       navigate("/", { replace: true });
-    } catch {
+    } catch (authError) {
+      logClientError(authError, { scope: "auth", action: "google-login" });
       setError("Google sign-in failed. Please try again.");
     } finally {
       setSubmitting(false);

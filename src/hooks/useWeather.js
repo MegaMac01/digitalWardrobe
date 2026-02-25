@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { logClientError } from "../utils/telemetry";
 
 const WEATHER_LABELS = {
   0: "Clear",
@@ -83,7 +84,8 @@ export function useWeather() {
       const next = await fetchWeatherByCoords(coords);
       setWeather(next);
       setError("");
-    } catch {
+    } catch (weatherError) {
+      logClientError(weatherError, { scope: "weather", action: "refresh" });
       setError("Weather service unavailable. You can still build outfits manually.");
     } finally {
       setLoading(false);
@@ -106,6 +108,10 @@ export function useWeather() {
         setCoords(nextCoords);
       },
       () => {
+        logClientError("Geolocation permission denied", {
+          scope: "weather",
+          action: "geolocation-denied",
+        });
         setError("Location denied. Outfit tips will be vibe-based only.");
         setLoading(false);
       },

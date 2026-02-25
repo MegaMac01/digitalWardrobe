@@ -31,6 +31,8 @@ export default function ClothingCard({ item, onToggleFavorite, onDelete }) {
         component="img"
         image={item.imageUrl}
         alt={`${item.type} in ${item.color || "unknown color"}`}
+        loading="lazy"
+        decoding="async"
         sx={{ aspectRatio: "1 / 1", objectFit: "cover" }}
       />
       <CardContent sx={{ py: 1.3, pb: 1, flexGrow: 1 }}>

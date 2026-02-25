@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
+import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import {
   Alert,
   Box,
@@ -7,6 +9,7 @@ import {
   Card,
   CardMedia,
   Grid,
+  IconButton,
   MenuItem,
   Stack,
   TextField,
@@ -23,6 +26,8 @@ import {
   TYPE_ORDER,
   VIBE_OPTIONS,
 } from "../../utils/outfitEngine";
+import { logClientError } from "../../utils/telemetry";
+import { sanitizeText, validateOutfitName } from "../../utils/validation";
 
 function reorderTypes(order, draggingType, targetType) {
   if (!draggingType || draggingType === targetType) {
@@ -38,6 +43,18 @@ function reorderTypes(order, draggingType, targetType) {
 
   next.splice(dragIndex, 1);
   next.splice(targetIndex, 0, draggingType);
+  return next;
+}
+
+function moveTypeByStep(order, type, step) {
+  const currentIndex = order.indexOf(type);
+  const targetIndex = currentIndex + step;
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= order.length) {
+    return order;
+  }
+  const next = [...order];
+  next.splice(currentIndex, 1);
+  next.splice(targetIndex, 0, type);
   return next;
 }
 
@@ -82,8 +99,9 @@ export default function OutfitBuilder() {
 
   async function handleSave(event) {
     event.preventDefault();
-    if (!name.trim()) {
-      setToast({ open: true, message: "Name your outfit first.", severity: "warning" });
+    const nameError = validateOutfitName(name);
+    if (nameError) {
+      setToast({ open: true, message: nameError, severity: "warning" });
       return;
     }
     if (missingRequired.length > 0) {
@@ -100,8 +118,8 @@ export default function OutfitBuilder() {
       const orderedPreview = previewOrder.filter((type) => selected[type]);
 
       await addOutfit({
-        name: name.trim(),
-        notes: notes.trim(),
+        name: sanitizeText(name, 60),
+        notes: sanitizeText(notes, 240),
         vibe,
         itemIdsByType: selected,
         previewOrder: orderedPreview,
@@ -112,7 +130,8 @@ export default function OutfitBuilder() {
       setName("");
       setNotes("");
       setToast({ open: true, message: "Outfit saved.", severity: "success" });
-    } catch {
+    } catch (error) {
+      logClientError(error, { scope: "builder", action: "save-outfit" });
       setToast({ open: true, message: "Could not save outfit.", severity: "error" });
     } finally {
       setSaving(false);
@@ -191,6 +210,8 @@ export default function OutfitBuilder() {
                           component="img"
                           image={item.imageUrl}
                           alt={item.type}
+                          loading="lazy"
+                          decoding="async"
                           sx={{ aspectRatio: "1 / 1", objectFit: "cover" }}
                         />
                       </Card>
@@ -250,11 +271,29 @@ export default function OutfitBuilder() {
                 ::
                 {type}
               </Typography>
+              <Stack direction="row" spacing={0.4} sx={{ mt: 0.2, mb: 0.2 }}>
+                <IconButton
+                  size="small"
+                  onClick={() => setPreviewOrder((prev) => moveTypeByStep(prev, type, -1))}
+                  aria-label={`Move ${type} earlier`}
+                >
+                  <ArrowBackIosNewIcon fontSize="inherit" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setPreviewOrder((prev) => moveTypeByStep(prev, type, 1))}
+                  aria-label={`Move ${type} later`}
+                >
+                  <ArrowForwardIosIcon fontSize="inherit" />
+                </IconButton>
+              </Stack>
               {selectedItems[type] ? (
                 <CardMedia
                   component="img"
                   image={selectedItems[type].imageUrl}
                   alt={type}
+                  loading="lazy"
+                  decoding="async"
                   draggable
                   onDragStart={() => setDraggingType(type)}
                   onDragEnd={() => setDraggingType(null)}

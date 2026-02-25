@@ -28,6 +28,8 @@ function OutfitPiece({ type, item }) {
           component="img"
           image={item.imageUrl}
           alt={type}
+          loading="lazy"
+          decoding="async"
           sx={{ mt: 0.5, borderRadius: 1.2, aspectRatio: "1 / 1", objectFit: "cover" }}
         />
       ) : (
@@ -91,6 +93,17 @@ export default function OutfitCard({
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             {outfit.notes}
           </Typography>
+        )}
+        {Array.isArray(outfit.whyItWorks) && outfit.whyItWorks.length > 0 && (
+          <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
+            {outfit.whyItWorks.slice(0, 3).map((reason) => (
+              <li key={reason}>
+                <Typography variant="caption" color="text.secondary">
+                  {reason}
+                </Typography>
+              </li>
+            ))}
+          </Box>
         )}
         {scheduledDates.length > 0 && (
           <Stack direction="row" spacing={0.7} sx={{ mt: 1, flexWrap: "wrap", rowGap: 0.8 }}>

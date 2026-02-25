@@ -14,6 +14,7 @@ import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage
 import { db, storage } from "../firebase";
 import { useAuth } from "./useAuth";
 import { TYPE_ORDER } from "../utils/outfitEngine";
+import { logClientError } from "../utils/telemetry";
 
 function sanitizeFileName(name) {
   return name.replace(/\s+/g, "-").replace(/[^\w.-]/g, "").toLowerCase();
@@ -47,6 +48,11 @@ export function useClothes() {
         setLoading(false);
       },
       () => {
+        logClientError("Wardrobe snapshot listener failed", {
+          scope: "clothes",
+          action: "snapshot-error",
+          metadata: { userId: user.uid },
+        });
         setError("Could not load wardrobe right now.");
         setLoading(false);
       }
@@ -88,7 +94,13 @@ export function useClothes() {
   const deleteClothing = useCallback(async (item) => {
     await deleteDoc(doc(db, "clothes", item.id));
     if (item.storagePath) {
-      await deleteObject(ref(storage, item.storagePath)).catch(() => {});
+      await deleteObject(ref(storage, item.storagePath)).catch((error) =>
+        logClientError(error, {
+          scope: "clothes",
+          action: "delete-storage-object",
+          metadata: { itemId: item.id },
+        })
+      );
     }
   }, []);
 

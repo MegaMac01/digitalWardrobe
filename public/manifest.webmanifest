@@ -1,0 +1,17 @@
+{
+  "name": "Vintage Digital Wardrobe",
+  "short_name": "Wardrobe",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5eddc",
+  "theme_color": "#6f4b32",
+  "description": "Upload clothes, plan outfits, and schedule your style calendar.",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

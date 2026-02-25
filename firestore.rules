@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isString(value, maxLen) {
+      return value is string && value.size() <= maxLen;
+    }
+
+    function isStringList(value, maxItems) {
+      return value is list && value.size() <= maxItems;
+    }
+
+    function validClothingData(data) {
+      return data.keys().hasAll(['uid', 'type', 'imageUrl', 'storagePath', 'createdAtMs'])
+        && isOwner(data.uid)
+        && isString(data.type, 32)
+        && isString(data.imageUrl, 2000)
+        && isString(data.storagePath, 240)
+        && data.createdAtMs is int
+        && (!data.keys().hasAny(['color']) || isString(data.color, 40))
+        && (!data.keys().hasAny(['notes']) || isString(data.notes, 280))
+        && (!data.keys().hasAny(['vibes']) || isStringList(data.vibes, 12))
+        && (!data.keys().hasAny(['seasonTags']) || isStringList(data.seasonTags, 8))
+        && (!data.keys().hasAny(['warmth']) || (data.warmth is int && data.warmth >= 1 && data.warmth <= 5))
+        && (!data.keys().hasAny(['favorite']) || data.favorite is bool)
+        && (!data.keys().hasAny(['isRainFriendly']) || data.isRainFriendly is bool);
+    }
+
+    function validOutfitData(data) {
+      return data.keys().hasAll(['uid', 'name', 'itemIdsByType', 'createdAtMs'])
+        && isOwner(data.uid)
+        && isString(data.name, 60)
+        && data.itemIdsByType is map
+        && data.createdAtMs is int
+        && (!data.keys().hasAny(['notes']) || isString(data.notes, 280))
+        && (!data.keys().hasAny(['vibe']) || isString(data.vibe, 24))
+        && (!data.keys().hasAny(['previewOrder']) || isStringList(data.previewOrder, 8))
+        && (!data.keys().hasAny(['scheduledDates']) || isStringList(data.scheduledDates, 120));
+    }
+
+    match /clothes/{docId} {
+      allow create: if validClothingData(request.resource.data);
+      allow read, delete: if isOwner(resource.data.uid);
+      allow update: if isOwner(resource.data.uid) && validClothingData(request.resource.data);
+    }
+
+    match /outfits/{docId} {
+      allow create: if validOutfitData(request.resource.data);
+      allow read, delete: if isOwner(resource.data.uid);
+      allow update: if isOwner(resource.data.uid) && validOutfitData(request.resource.data);
+    }
+
+    match /client_errors/{docId} {
+      allow create: if isSignedIn();
+      allow read: if false;
+      allow update, delete: if false;
+    }
+  }
+}

@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "./useAuth";
+import { logClientError } from "../utils/telemetry";
 
 function sortNewest(items) {
   return [...items].sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
@@ -43,6 +44,11 @@ export function useOutfits() {
         setLoading(false);
       },
       () => {
+        logClientError("Outfit snapshot listener failed", {
+          scope: "outfits",
+          action: "snapshot-error",
+          metadata: { userId: user.uid },
+        });
         setError("Could not load outfits right now.");
         setLoading(false);
       }

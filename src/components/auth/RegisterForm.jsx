@@ -11,6 +11,8 @@ import {
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import GoogleSignInButton from "./GoogleSignInButton";
 import { useAuth } from "../../hooks/useAuth";
+import { isValidEmail, validatePassword } from "../../utils/validation";
+import { logClientError } from "../../utils/telemetry";
 
 export default function RegisterForm() {
   const [email, setEmail] = useState("");
@@ -22,8 +24,14 @@ export default function RegisterForm() {
 
   async function handleRegister(event) {
     event.preventDefault();
-    if (password.length < 6) {
-      setError("Use at least 6 characters for your password.");
+    if (!isValidEmail(email)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -32,7 +40,8 @@ export default function RegisterForm() {
     try {
       await register(email, password);
       navigate("/", { replace: true });
-    } catch {
+    } catch (authError) {
+      logClientError(authError, { scope: "auth", action: "register" });
       setError("Unable to create account with that email/password.");
     } finally {
       setSubmitting(false);
@@ -45,7 +54,8 @@ export default function RegisterForm() {
     try {
       await signInWithGoogle();
       navigate("/", { replace: true });
-    } catch {
+    } catch (authError) {
+      logClientError(authError, { scope: "auth", action: "google-register" });
       setError("Google sign-up failed. Try again.");
     } finally {
       setSubmitting(false);
