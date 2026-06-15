@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import {
@@ -247,15 +248,37 @@ export default function ClothingUploader({ onAdded }) {
           sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.1fr 1.3fr" }, gap: 2 }}
         >
           <Stack spacing={1.3}>
-            <Button component="label" variant="contained" startIcon={<UploadFileIcon />}>
-              {rawFile ? "Change Image" : "Upload Image"}
-              <input
-                type="file"
-                hidden
-                accept="image/*"
-                onChange={(event) => setRawFile(event.target.files?.[0] ?? null)}
-              />
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                fullWidth
+                component="label"
+                variant="contained"
+                startIcon={<PhotoCameraIcon />}
+              >
+                Take Photo
+                <input
+                  type="file"
+                  hidden
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(event) => setRawFile(event.target.files?.[0] ?? null)}
+                />
+              </Button>
+              <Button
+                fullWidth
+                component="label"
+                variant="outlined"
+                startIcon={<UploadFileIcon />}
+              >
+                {rawFile ? "Change" : "Upload"}
+                <input
+                  type="file"
+                  hidden
+                  accept="image/*"
+                  onChange={(event) => setRawFile(event.target.files?.[0] ?? null)}
+                />
+              </Button>
+            </Stack>
             <FormControlLabel
               control={
                 <Switch checked={removeBg} onChange={(event) => setRemoveBg(event.target.checked)} />
