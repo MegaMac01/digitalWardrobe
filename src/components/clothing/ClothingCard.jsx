@@ -1,5 +1,6 @@
 import React from "react";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import StarIcon from "@mui/icons-material/Star";
 import {
@@ -24,7 +25,7 @@ function TinyMeta({ label, value }) {
   );
 }
 
-export default function ClothingCard({ item, onToggleFavorite, onDelete }) {
+export default function ClothingCard({ item, onToggleFavorite, onEdit, onDelete }) {
   return (
     <Card sx={{ overflow: "hidden", height: "100%", display: "flex", flexDirection: "column" }}>
       <CardMedia
@@ -71,6 +72,13 @@ export default function ClothingCard({ item, onToggleFavorite, onDelete }) {
           </IconButton>
         </Tooltip>
         <Box sx={{ flexGrow: 1 }} />
+        {onEdit && (
+          <Tooltip title="Edit item">
+            <IconButton size="small" onClick={() => onEdit(item)}>
+              <EditOutlinedIcon />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title="Delete item">
           <IconButton size="small" color="error" onClick={() => onDelete(item)}>
             <DeleteOutlineIcon />

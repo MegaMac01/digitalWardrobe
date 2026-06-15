@@ -5,8 +5,10 @@ import Toast from "../layout/Toast";
 import EmptyState from "../layout/EmptyState";
 import ClothingCard from "./ClothingCard";
 import ClothingFilterBar from "./ClothingFilterBar";
+import ClothingEditDialog from "./ClothingEditDialog";
 import { useClothes } from "../../hooks/useClothes";
 import { useDeferredDelete } from "../../hooks/useDeferredDelete";
+import { logClientError } from "../../utils/telemetry";
 
 const PAGE_SIZE = 24;
 
@@ -41,6 +43,7 @@ export default function ClothingGallery({ onAddItem }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [toast, setToast] = useState({ open: false, message: "", severity: "info", undoId: null });
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [editingItem, setEditingItem] = useState(null);
   const { pendingIds, scheduleDelete, undoDelete } = useDeferredDelete(deleteClothing);
 
   const filtered = useMemo(
@@ -74,6 +77,17 @@ export default function ClothingGallery({ onAddItem }) {
   function handleUndo() {
     if (toast.undoId) undoDelete(toast.undoId);
     setToast((prev) => ({ ...prev, open: false, undoId: null }));
+  }
+
+  async function handleSaveEdit(itemId, payload) {
+    try {
+      await updateClothing(itemId, payload);
+      setToast({ open: true, message: "Item updated.", severity: "success", undoId: null });
+      setEditingItem(null);
+    } catch (error) {
+      logClientError(error, { scope: "clothes", action: "update-item", metadata: { itemId } });
+      setToast({ open: true, message: "Could not update item.", severity: "error", undoId: null });
+    }
   }
 
   if (loading) {
@@ -114,6 +128,7 @@ export default function ClothingGallery({ onAddItem }) {
                 <ClothingCard
                   item={item}
                   onToggleFavorite={handleToggleFavorite}
+                  onEdit={(it) => setEditingItem(it)}
                   onDelete={handleDelete}
                 />
               </Grid>
@@ -132,6 +147,13 @@ export default function ClothingGallery({ onAddItem }) {
           )}
         </>
       )}
+
+      <ClothingEditDialog
+        open={Boolean(editingItem)}
+        item={editingItem}
+        onClose={() => setEditingItem(null)}
+        onSave={handleSaveEdit}
+      />
 
       <Toast
         open={toast.open}
