@@ -195,7 +195,7 @@ export default function OutfitBuilder() {
 
       {weather && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Weather cue: {Math.round(weather.temperature)}F, {weather.label}.
+          Weather cue: {Math.round(weather.temperature)}°C, {weather.label}.
         </Alert>
       )}
 

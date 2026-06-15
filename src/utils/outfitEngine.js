@@ -400,7 +400,7 @@ export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } =
 }
 
 export function buildOutfitName(vibe, weather) {
-  const temp = weather?.temperature ? `${Math.round(weather.temperature)}F` : "Any Weather";
+  const temp = weather?.temperature ? `${Math.round(weather.temperature)}°C` : "Any Weather";
   const mood = vibe && vibe !== "Any" ? vibe : "Everyday";
   return `${mood} ${temp} Fit`;
 }

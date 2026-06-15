@@ -39,5 +39,5 @@ export function getTimeOfDay(date = new Date()) {
 
 export function formatTemp(temperature) {
   if (temperature === null || temperature === undefined) return "--";
-  return `${Math.round(temperature)}°`;
+  return `${Math.round(temperature)}°C`;
 }

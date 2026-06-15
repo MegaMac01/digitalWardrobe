@@ -85,7 +85,7 @@ export default function OutfitCard({
           )}
           {outfit.weatherSnapshot?.label && (
             <Chip
-              label={`${Math.round(outfit.weatherSnapshot.temperature)}F ${outfit.weatherSnapshot.label}`}
+              label={`${Math.round(outfit.weatherSnapshot.temperature)}°C ${outfit.weatherSnapshot.label}`}
               size="small"
               variant="outlined"
             />

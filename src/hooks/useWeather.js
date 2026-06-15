@@ -35,7 +35,8 @@ const WEATHER_LABELS = {
 };
 
 function normalizeWeather(current = {}) {
-  const temperature = Number(current.temperature_2m ?? 68);
+  // Temperatures are in Celsius, wind in km/h (see fetch params below).
+  const temperature = Number(current.temperature_2m ?? 20);
   const apparentTemperature = Number(current.apparent_temperature ?? temperature);
   const precipitation = Number(current.precipitation ?? 0);
   const windSpeed = Number(current.wind_speed_10m ?? 0);
@@ -48,11 +49,11 @@ function normalizeWeather(current = {}) {
     windSpeed,
     weatherCode,
     label: WEATHER_LABELS[weatherCode] ?? "Unknown",
-    isCold: apparentTemperature <= 50,
-    isHot: apparentTemperature >= 79,
+    isCold: apparentTemperature <= 10,
+    isHot: apparentTemperature >= 26,
     isRaining: precipitation > 0 || [51, 53, 55, 61, 63, 65, 80, 81, 82].includes(weatherCode),
     isSnowing: [71, 73, 75, 77, 85, 86].includes(weatherCode),
-    isWindy: windSpeed >= 16,
+    isWindy: windSpeed >= 25,
   };
 }
 
@@ -61,8 +62,8 @@ async function fetchWeatherByCoords({ latitude, longitude }) {
     latitude: String(latitude),
     longitude: String(longitude),
     current: "temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m",
-    temperature_unit: "fahrenheit",
-    wind_speed_unit: "mph",
+    temperature_unit: "celsius",
+    wind_speed_unit: "kmh",
     timezone: "auto",
   });
   const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
