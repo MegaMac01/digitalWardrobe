@@ -4,8 +4,7 @@ import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
-import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import TodayIcon from "@mui/icons-material/Today";
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
@@ -13,8 +12,8 @@ import {
   Alert,
   Box,
   Button,
+  ButtonBase,
   Card,
-  CardContent,
   CardMedia,
   Chip,
   CircularProgress,
@@ -25,7 +24,6 @@ import {
   MenuItem,
   Stack,
   TextField,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import { useClothes } from "../../hooks/useClothes";
@@ -48,15 +46,14 @@ import Loader from "../layout/Loader";
 import EmptyState from "../layout/EmptyState";
 import Toast from "../layout/Toast";
 
-// Visual order is top-of-body to bottom, then accessories.
-const SLOTS = [
-  { key: "outer", label: "Outer layer", roles: ["outer"], optional: true },
-  { key: "mid", label: "Mid layer", roles: ["mid"], optional: true },
-  { key: "top", label: "Top or dress", roles: ["base", "onepiece"] },
-  { key: "bottom", label: "Bottom", roles: ["bottom"] },
-  { key: "footwear", label: "Shoes", roles: ["footwear"] },
-  { key: "accessory", label: "Accessories", roles: ["accessory"], optional: true, multi: true },
-];
+// Pieces laid out like a real outfit: layers up top, the body line down the
+// middle (top/dress -> bottom -> shoes), accessories at the foot.
+const OUTER_CFG = { label: "Outer", roles: ["outer"] };
+const MID_CFG = { label: "Mid", roles: ["mid"] };
+const TOP_CFG = { label: "Top / dress", roles: ["base", "onepiece"] };
+const BOTTOM_CFG = { label: "Bottom", roles: ["bottom"] };
+const SHOES_CFG = { label: "Shoes", roles: ["footwear"] };
+const ACC_CFG = { label: "Accessory", roles: ["accessory"], multi: true };
 
 const CHECKER_BG = {
   backgroundColor: "#efe7d6",
@@ -237,6 +234,69 @@ export default function OutfitBuilder() {
     }
   }
 
+  const itemFor = (roles) => itemsList.find((item) => roles.includes(TYPE_ROLE[item.type])) ?? null;
+  const accessoryItems = itemsList.filter((item) => TYPE_ROLE[item.type] === "accessory");
+
+  // One piece in the flat-lay. Tappable to pick/swap; empty shows an add prompt.
+  function tile(cfg, item, width, height = width) {
+    if (!item) {
+      return (
+        <ButtonBase
+          onClick={() => setPicker(cfg)}
+          sx={{
+            width,
+            height,
+            borderRadius: 1.5,
+            border: "1px dashed",
+            borderColor: "rgba(111,75,50,0.35)",
+            color: "text.secondary",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 0.5,
+          }}
+        >
+          <AddIcon fontSize="small" />
+          <Typography variant="caption">{cfg.label}</Typography>
+        </ButtonBase>
+      );
+    }
+    return (
+      <Box sx={{ position: "relative", width, height }}>
+        <ButtonBase
+          onClick={() => setPicker(cfg)}
+          sx={{ width: "100%", height: "100%", borderRadius: 1.5, overflow: "hidden", ...CHECKER_BG }}
+        >
+          <Box
+            component="img"
+            src={item.imageUrl}
+            alt={item.type}
+            sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+          />
+        </ButtonBase>
+        <IconButton
+          size="small"
+          onClick={() => toggleLock(item.type)}
+          sx={{ position: "absolute", top: 2, left: 2, p: 0.3, bgcolor: "rgba(255,248,234,0.85)" }}
+        >
+          {locked.has(item.type) ? (
+            <LockIcon sx={{ fontSize: 16 }} color="secondary" />
+          ) : (
+            <LockOpenIcon sx={{ fontSize: 16 }} />
+          )}
+        </IconButton>
+        <IconButton
+          size="small"
+          onClick={() => removeType(item.type)}
+          sx={{ position: "absolute", top: 2, right: 2, p: 0.3, bgcolor: "rgba(255,248,234,0.85)" }}
+        >
+          <CloseIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      </Box>
+    );
+  }
+
   if (loading) {
     return <Loader />;
   }
@@ -311,90 +371,33 @@ export default function OutfitBuilder() {
       >
         {/* The look, slot by slot */}
         <Box sx={{ flex: 1, minWidth: 0, width: "100%" }}>
-          <Stack spacing={1.2}>
-            {SLOTS.map((slot) => {
-              const slotItems = itemsList.filter((item) => slot.roles.includes(TYPE_ROLE[item.type]));
-              const bottomCovered = slot.key === "bottom" && hasOnepiece;
+          <Box sx={{ maxWidth: 440, mx: "auto", py: 1 }}>
+            {/* Layers */}
+            <Stack direction="row" spacing={1.2} justifyContent="center" sx={{ mb: 1.2 }}>
+              {tile(OUTER_CFG, itemFor(["outer"]), 96)}
+              {tile(MID_CFG, itemFor(["mid"]), 96)}
+            </Stack>
 
-              return (
-                <Card key={slot.key} variant="outlined">
-                  <CardContent sx={{ py: 1.2, "&:last-child": { pb: 1.2 } }}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <Typography variant="subtitle2" sx={{ width: 110, flexShrink: 0 }}>
-                        {slot.label}
-                        {!slot.optional && !bottomCovered && (
-                          <Box component="span" sx={{ color: "error.main" }}>
-                            {" "}
-                            *
-                          </Box>
-                        )}
-                      </Typography>
+            {/* Body line: top/dress -> bottom -> shoes */}
+            <Stack spacing={1.2} alignItems="center">
+              {tile(TOP_CFG, itemFor(["base", "onepiece"]), 176, hasOnepiece ? 240 : 176)}
+              {!hasOnepiece && tile(BOTTOM_CFG, itemFor(["bottom"]), 176)}
+              {tile(SHOES_CFG, itemFor(["footwear"]), 176, 128)}
+            </Stack>
 
-                      {bottomCovered ? (
-                        <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
-                          Covered by your dress.
-                        </Typography>
-                      ) : slotItems.length > 0 ? (
-                        <Stack direction="row" spacing={1} sx={{ flexGrow: 1, flexWrap: "wrap", rowGap: 1 }}>
-                          {slotItems.map((item) => (
-                            <Stack key={item.id} direction="row" spacing={0.5} alignItems="center">
-                              <CardMedia
-                                component="img"
-                                image={item.imageUrl}
-                                alt={item.type}
-                                sx={{
-                                  width: 104,
-                                  height: 104,
-                                  borderRadius: 1.2,
-                                  objectFit: "contain",
-                                  ...CHECKER_BG,
-                                }}
-                              />
-                              <Stack>
-                                <Tooltip title={locked.has(item.type) ? "Locked" : "Lock this piece"}>
-                                  <IconButton size="small" onClick={() => toggleLock(item.type)}>
-                                    {locked.has(item.type) ? (
-                                      <LockIcon fontSize="small" color="secondary" />
-                                    ) : (
-                                      <LockOpenIcon fontSize="small" />
-                                    )}
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Remove">
-                                  <IconButton size="small" onClick={() => removeType(item.type)}>
-                                    <DeleteOutlineIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </Stack>
-                            </Stack>
-                          ))}
-                          {(slot.multi ? slotItems.length < 2 : false) && (
-                            <Button size="small" startIcon={<AddIcon />} onClick={() => setPicker(slot)}>
-                              Add
-                            </Button>
-                          )}
-                          {!slot.multi && (
-                            <Button size="small" startIcon={<SwapHorizIcon />} onClick={() => setPicker(slot)}>
-                              Swap
-                            </Button>
-                          )}
-                        </Stack>
-                      ) : (
-                        <Button
-                          variant="text"
-                          startIcon={<AddIcon />}
-                          onClick={() => setPicker(slot)}
-                          sx={{ flexGrow: 1, justifyContent: "flex-start", color: "text.secondary" }}
-                        >
-                          Add {slot.label.toLowerCase()}
-                        </Button>
-                      )}
-                    </Stack>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </Stack>
+            {/* Accessories */}
+            <Stack
+              direction="row"
+              spacing={1.2}
+              justifyContent="center"
+              sx={{ mt: 1.2, flexWrap: "wrap", rowGap: 1.2 }}
+            >
+              {accessoryItems.map((item) => (
+                <React.Fragment key={item.id}>{tile(ACC_CFG, item, 96)}</React.Fragment>
+              ))}
+              {accessoryItems.length < 2 && tile(ACC_CFG, null, 96)}
+            </Stack>
+          </Box>
         </Box>
 
         {/* Read-out + save */}
