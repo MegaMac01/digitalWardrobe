@@ -21,7 +21,6 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
-  Grid,
   IconButton,
   MenuItem,
   Stack,
@@ -302,9 +301,16 @@ export default function OutfitBuilder() {
         </Typography>
       )}
 
-      <Grid container spacing={2}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          gap: 2,
+          alignItems: "flex-start",
+        }}
+      >
         {/* The look, slot by slot */}
-        <Grid item xs={12} md={7}>
+        <Box sx={{ flex: 1, minWidth: 0, width: "100%" }}>
           <Stack spacing={1.2}>
             {SLOTS.map((slot) => {
               const slotItems = itemsList.filter((item) => slot.roles.includes(TYPE_ROLE[item.type]));
@@ -389,10 +395,10 @@ export default function OutfitBuilder() {
               );
             })}
           </Stack>
-        </Grid>
+        </Box>
 
         {/* Read-out + save */}
-        <Grid item xs={12} md={5}>
+        <Box sx={{ width: { xs: "100%", md: 360 }, flexShrink: 0 }}>
           <Card sx={{ p: 2, position: { md: "sticky" }, top: { md: 88 } }}>
             {weather && (
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -440,8 +446,8 @@ export default function OutfitBuilder() {
               </Button>
             </Stack>
           </Card>
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
 
       {/* Picker */}
       <Dialog open={Boolean(picker)} onClose={() => setPicker(null)} fullWidth maxWidth="sm">
@@ -452,33 +458,38 @@ export default function OutfitBuilder() {
               No items for this slot yet. Add some in your closet.
             </Typography>
           ) : (
-            <Grid container spacing={1.2}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+                gap: 1.2,
+              }}
+            >
               {pickerItems.map((item) => {
                 const isSelected = selected[item.type] === item.id;
                 return (
-                  <Grid item xs={4} sm={3} key={item.id}>
-                    <Card
-                      onClick={() => setPick(item)}
-                      sx={{
-                        cursor: "pointer",
-                        border: isSelected ? "2px solid" : "1px solid transparent",
-                        borderColor: isSelected ? "secondary.main" : "transparent",
-                      }}
-                    >
-                      <CardMedia
-                        component="img"
-                        image={item.imageUrl}
-                        alt={item.type}
-                        sx={{ aspectRatio: "1 / 1", objectFit: "contain", ...CHECKER_BG }}
-                      />
-                      <Typography variant="caption" sx={{ display: "block", textAlign: "center", py: 0.3 }}>
-                        {item.color || item.type}
-                      </Typography>
-                    </Card>
-                  </Grid>
+                  <Card
+                    key={item.id}
+                    onClick={() => setPick(item)}
+                    sx={{
+                      cursor: "pointer",
+                      border: isSelected ? "2px solid" : "1px solid transparent",
+                      borderColor: isSelected ? "secondary.main" : "transparent",
+                    }}
+                  >
+                    <CardMedia
+                      component="img"
+                      image={item.imageUrl}
+                      alt={item.type}
+                      sx={{ aspectRatio: "1 / 1", objectFit: "contain", ...CHECKER_BG }}
+                    />
+                    <Typography variant="caption" sx={{ display: "block", textAlign: "center", py: 0.3 }}>
+                      {item.color || item.type}
+                    </Typography>
+                  </Card>
                 );
               })}
-            </Grid>
+            </Box>
           )}
         </DialogContent>
       </Dialog>
