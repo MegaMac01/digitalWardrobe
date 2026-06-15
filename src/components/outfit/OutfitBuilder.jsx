@@ -5,6 +5,8 @@ import ShuffleIcon from "@mui/icons-material/Shuffle";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import CloseIcon from "@mui/icons-material/Close";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import AddIcon from "@mui/icons-material/Add";
 import TodayIcon from "@mui/icons-material/Today";
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
@@ -289,6 +291,35 @@ export default function OutfitBuilder() {
     );
   }
 
+  // Step through the items available for a slot's role(s).
+  function cycle(cfg, item, dir) {
+    const pool = clothes.filter((c) => cfg.roles.includes(TYPE_ROLE[c.type]));
+    if (pool.length === 0) return;
+    if (!item) {
+      setPick(dir > 0 ? pool[0] : pool[pool.length - 1]);
+      return;
+    }
+    const index = pool.findIndex((c) => c.id === item.id);
+    const nextIndex = index < 0 ? 0 : (index + dir + pool.length) % pool.length;
+    setPick(pool[nextIndex]);
+  }
+
+  // A tile flanked by prev/next arrows to flip through that slot's items.
+  function withArrows(cfg, item, width, height = width) {
+    const poolEmpty = !clothes.some((c) => cfg.roles.includes(TYPE_ROLE[c.type]));
+    return (
+      <Stack direction="row" alignItems="center" spacing={0.25}>
+        <IconButton size="small" onClick={() => cycle(cfg, item, -1)} disabled={poolEmpty}>
+          <ChevronLeftIcon fontSize="small" />
+        </IconButton>
+        {tile(cfg, item, width, height)}
+        <IconButton size="small" onClick={() => cycle(cfg, item, 1)} disabled={poolEmpty}>
+          <ChevronRightIcon fontSize="small" />
+        </IconButton>
+      </Stack>
+    );
+  }
+
   if (loading) {
     return <Loader />;
   }
@@ -365,16 +396,21 @@ export default function OutfitBuilder() {
         <Box sx={{ flex: 1, minWidth: 0, width: "100%" }}>
           <Box sx={{ maxWidth: 440, mx: "auto", py: 1 }}>
             {/* Layers */}
-            <Stack direction="row" spacing={1.2} justifyContent="center" sx={{ mb: 1.2 }}>
-              {tile(OUTER_CFG, itemFor(["outer"]), 96)}
-              {tile(MID_CFG, itemFor(["mid"]), 96)}
+            <Stack
+              direction="row"
+              spacing={1}
+              justifyContent="center"
+              sx={{ mb: 1.2, flexWrap: "wrap", rowGap: 1 }}
+            >
+              {withArrows(OUTER_CFG, itemFor(["outer"]), 96)}
+              {withArrows(MID_CFG, itemFor(["mid"]), 96)}
             </Stack>
 
             {/* Body line: top/dress -> bottom -> shoes */}
             <Stack spacing={1.2} alignItems="center">
-              {tile(TOP_CFG, itemFor(["base", "onepiece"]), 176, hasOnepiece ? 240 : 176)}
-              {!hasOnepiece && tile(BOTTOM_CFG, itemFor(["bottom"]), 176)}
-              {tile(SHOES_CFG, itemFor(["footwear"]), 176, 128)}
+              {withArrows(TOP_CFG, itemFor(["base", "onepiece"]), 176, hasOnepiece ? 240 : 176)}
+              {!hasOnepiece && withArrows(BOTTOM_CFG, itemFor(["bottom"]), 176)}
+              {withArrows(SHOES_CFG, itemFor(["footwear"]), 176, 128)}
             </Stack>
 
             {/* Accessories */}
