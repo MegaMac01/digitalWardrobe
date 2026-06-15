@@ -55,14 +55,6 @@ const BOTTOM_CFG = { label: "Bottom", roles: ["bottom"] };
 const SHOES_CFG = { label: "Shoes", roles: ["footwear"] };
 const ACC_CFG = { label: "Accessory", roles: ["accessory"], multi: true };
 
-const CHECKER_BG = {
-  backgroundColor: "#efe7d6",
-  backgroundImage:
-    "linear-gradient(45deg, rgba(111,75,50,0.1) 25%, transparent 25%), linear-gradient(-45deg, rgba(111,75,50,0.1) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(111,75,50,0.1) 75%), linear-gradient(-45deg, transparent 75%, rgba(111,75,50,0.1) 75%)",
-  backgroundSize: "16px 16px",
-  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
-};
-
 function formalityWord(items) {
   const values = items.map((item) => Number(item.formality ?? 3)).filter(Boolean);
   if (values.length === 0) return null;
@@ -266,7 +258,7 @@ export default function OutfitBuilder() {
       <Box sx={{ position: "relative", width, height }}>
         <ButtonBase
           onClick={() => setPicker(cfg)}
-          sx={{ width: "100%", height: "100%", borderRadius: 1.5, overflow: "hidden", ...CHECKER_BG }}
+          sx={{ width: "100%", height: "100%", borderRadius: 1.5, overflow: "hidden" }}
         >
           <Box
             component="img"
@@ -484,7 +476,7 @@ export default function OutfitBuilder() {
                       component="img"
                       image={item.imageUrl}
                       alt={item.type}
-                      sx={{ aspectRatio: "1 / 1", objectFit: "contain", ...CHECKER_BG }}
+                      sx={{ aspectRatio: "1 / 1", objectFit: "contain" }}
                     />
                     <Typography variant="caption" sx={{ display: "block", textAlign: "center", py: 0.3 }}>
                       {item.color || item.type}
