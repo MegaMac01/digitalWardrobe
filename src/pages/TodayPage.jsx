@@ -43,6 +43,8 @@ export default function TodayPage() {
   const { weather, loading: loadingWeather, error: weatherError } = useWeather();
 
   const [occasion, setOccasion] = useState("");
+  const [customOccasion, setCustomOccasion] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
   const [vibe, setVibe] = useState("Any");
   const [notes, setNotes] = useState("");
   const [suggestion, setSuggestion] = useState(null);
@@ -227,7 +229,47 @@ export default function TodayPage() {
             sx={{ fontSize: 15, py: 2, px: 0.5 }}
           />
         ))}
+        <Chip
+          label="Other…"
+          color={occasion && !OCCASION_PRESETS.includes(occasion) ? "secondary" : "default"}
+          variant={occasion && !OCCASION_PRESETS.includes(occasion) ? "filled" : "outlined"}
+          onClick={() => setShowCustom((prev) => !prev)}
+          disabled={generating}
+          sx={{ fontSize: 15, py: 2, px: 0.5 }}
+        />
       </Stack>
+
+      {showCustom && (
+        <Stack
+          component="form"
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          sx={{ mb: 1.6 }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (customOccasion.trim()) generate(customOccasion.trim());
+          }}
+        >
+          <TextField
+            fullWidth
+            size="small"
+            autoFocus
+            label="Where are you headed?"
+            placeholder="Art gallery, road trip, job interview…"
+            value={customOccasion}
+            onChange={(event) => setCustomOccasion(event.target.value)}
+          />
+          <Button
+            type="submit"
+            variant="contained"
+            startIcon={generating ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+            disabled={generating || !customOccasion.trim()}
+            sx={{ flexShrink: 0 }}
+          >
+            Style me
+          </Button>
+        </Stack>
+      )}
 
       {/* Fine-tune (optional) */}
       <Accordion
