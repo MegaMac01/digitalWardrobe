@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import {
   Accordion,
   AccordionDetails,
@@ -10,6 +11,7 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   FormControlLabel,
   MenuItem,
@@ -20,8 +22,26 @@ import {
 } from "@mui/material";
 import { useClothes } from "../../hooks/useClothes";
 import { SEASON_OPTIONS, TYPE_ORDER, VIBE_OPTIONS } from "../../utils/outfitEngine";
+import { analyzeGarment } from "../../utils/aiStylist";
 import { logClientError } from "../../utils/telemetry";
 import { sanitizeText, validateImageFile } from "../../utils/validation";
+
+// Downscale to a small JPEG and return base64 for the vision auto-tagger.
+async function toAnalyzePayload(file) {
+  const small = await resizeToFile(file, {
+    name: "analyze.jpg",
+    maxDimension: 512,
+    mimeType: "image/jpeg",
+    quality: 0.8,
+  });
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(small);
+  });
+  return { base64: String(dataUrl).split(",")[1], mediaType: "image/jpeg" };
+}
 
 // Resize an image blob via canvas. Keeps transparency when mimeType is image/png.
 function resizeToFile(blob, { name, maxDimension = 800, mimeType = "image/jpeg", quality = 0.82 }) {
@@ -90,6 +110,8 @@ export default function ClothingUploader({ onAdded }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiTagged, setAiTagged] = useState(false);
   const { addClothing } = useClothes();
 
   // Prepare the image (cut out background + resize) whenever the file or the
@@ -134,6 +156,48 @@ export default function ClothingUploader({ onAdded }) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [rawFile, removeBg]);
+
+  // Auto-tag the item from its photo. Pre-fills type/color/seasons/vibes/warmth
+  // so the user rarely has to touch the details. Silently no-ops if the AI
+  // function isn't deployed (analyzeGarment returns null).
+  useEffect(() => {
+    if (!rawFile) {
+      setAiTagged(false);
+      return () => {};
+    }
+
+    let cancelled = false;
+    setAnalyzing(true);
+    setAiTagged(false);
+
+    (async () => {
+      try {
+        const { base64, mediaType } = await toAnalyzePayload(rawFile);
+        const tags = await analyzeGarment(base64, mediaType);
+        if (cancelled || !tags) return;
+        setForm((prev) => ({
+          ...prev,
+          type: tags.type || prev.type,
+          color: tags.color ?? prev.color,
+          seasonTags:
+            Array.isArray(tags.seasonTags) && tags.seasonTags.length
+              ? tags.seasonTags
+              : prev.seasonTags,
+          vibes: Array.isArray(tags.vibes) && tags.vibes.length ? tags.vibes : prev.vibes,
+          warmth: tags.warmth || prev.warmth,
+          isRainFriendly:
+            typeof tags.isRainFriendly === "boolean" ? tags.isRainFriendly : prev.isRainFriendly,
+        }));
+        setAiTagged(true);
+      } finally {
+        if (!cancelled) setAnalyzing(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rawFile]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -252,6 +316,23 @@ export default function ClothingUploader({ onAdded }) {
           </Stack>
 
           <Stack spacing={1.2}>
+            {analyzing && (
+              <Stack direction="row" spacing={1} alignItems="center">
+                <CircularProgress size={16} />
+                <Typography variant="caption" color="text.secondary">
+                  Tagging this item with AI…
+                </Typography>
+              </Stack>
+            )}
+            {!analyzing && aiTagged && (
+              <Chip
+                size="small"
+                color="secondary"
+                icon={<AutoAwesomeIcon />}
+                label="Tagged by AI — open details to adjust"
+                sx={{ alignSelf: "flex-start" }}
+              />
+            )}
             <TextField
               select
               label="Type"
@@ -372,7 +453,7 @@ export default function ClothingUploader({ onAdded }) {
               </AccordionDetails>
             </Accordion>
 
-            <Button type="submit" variant="contained" disabled={submitting || processing}>
+            <Button type="submit" variant="contained" disabled={submitting || processing || analyzing}>
               {submitting ? <CircularProgress size={22} /> : "Save item"}
             </Button>
             {error && <Alert severity="error">{error}</Alert>}

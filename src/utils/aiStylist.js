@@ -4,6 +4,22 @@ import { buildSuggestedOutfit, buildOutfitName, TYPE_ORDER } from "./outfitEngin
 import { logClientError } from "./telemetry";
 
 const callSuggestOutfit = httpsCallable(functions, "suggestOutfit");
+const callAnalyzeGarment = httpsCallable(functions, "analyzeGarment");
+
+/**
+ * Ask the AI to tag a clothing photo. Returns the tag object
+ * ({ type, color, seasonTags, vibes, warmth, isRainFriendly }) or null if the
+ * function isn't deployed / errors — callers fall back to manual defaults.
+ */
+export async function analyzeGarment(imageBase64, mediaType) {
+  try {
+    const response = await callAnalyzeGarment({ imageBase64, mediaType });
+    return response.data || null;
+  } catch (error) {
+    logClientError(error, { scope: "ai-stylist", action: "analyze-garment" });
+    return null;
+  }
+}
 
 // Trim each wardrobe item to just the fields the stylist needs (no image URLs etc.).
 function toWardrobePayload(clothes) {

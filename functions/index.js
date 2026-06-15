@@ -113,3 +113,90 @@ export const suggestOutfit = onCall(
     }
   }
 );
+
+// --- Auto-tagging: look at a clothing photo and return wardrobe tags ---
+
+const GARMENT_TYPES = ["Shirt", "Pants", "Jacket", "Shoes", "Other"];
+const GARMENT_SEASONS = ["Any", "Spring", "Summer", "Autumn", "Winter"];
+const GARMENT_VIBES = [
+  "Classic",
+  "Street",
+  "Minimal",
+  "Cozy",
+  "Romantic",
+  "Formal",
+  "Sporty",
+  "Bold",
+];
+
+const GARMENT_SCHEMA = {
+  type: "object",
+  properties: {
+    type: { type: "string", enum: GARMENT_TYPES },
+    color: { type: "string", description: "A simple common color name, e.g. navy, tan, olive." },
+    seasonTags: { type: "array", items: { type: "string", enum: GARMENT_SEASONS } },
+    vibes: { type: "array", items: { type: "string", enum: GARMENT_VIBES } },
+    warmth: { type: "integer", enum: [1, 2, 3, 4, 5] },
+    isRainFriendly: { type: "boolean" },
+  },
+  required: ["type", "color", "seasonTags", "vibes", "warmth", "isRainFriendly"],
+  additionalProperties: false,
+};
+
+export const analyzeGarment = onCall(
+  { secrets: [ANTHROPIC_API_KEY], cors: true, timeoutSeconds: 60 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in to analyze photos.");
+    }
+
+    const { imageBase64, mediaType } = request.data || {};
+    if (!imageBase64) {
+      throw new HttpsError("invalid-argument", "No image provided.");
+    }
+
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+
+    try {
+      const response = await client.messages.create({
+        model: MODEL,
+        max_tokens: 512,
+        output_config: {
+          format: { type: "json_schema", schema: GARMENT_SCHEMA },
+          effort: "low",
+        },
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mediaType || "image/jpeg", data: imageBase64 },
+              },
+              {
+                type: "text",
+                text: "Identify this single clothing item for a wardrobe app. Choose the closest type, a simple common color name, the seasons it suits, 1-3 style vibes from the allowed list, a warmth level from 1 (breezy) to 5 (heavy/insulated), and whether it is rain-friendly.",
+              },
+            ],
+          },
+        ],
+      });
+
+      const textBlock = response.content.find((block) => block.type === "text");
+      if (!textBlock) {
+        throw new HttpsError("internal", "No analysis returned.");
+      }
+      return JSON.parse(textBlock.text);
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      if (error instanceof Anthropic.RateLimitError) {
+        throw new HttpsError("resource-exhausted", "Busy right now. Try again shortly.");
+      }
+      if (error instanceof Anthropic.AuthenticationError) {
+        throw new HttpsError("failed-precondition", "AI is not configured.");
+      }
+      console.error("analyzeGarment failed", error);
+      throw new HttpsError("internal", "Could not analyze the image.");
+    }
+  }
+);
