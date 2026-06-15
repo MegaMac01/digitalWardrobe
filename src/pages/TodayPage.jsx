@@ -34,20 +34,7 @@ import { sanitizeText } from "../utils/validation";
 import Loader from "../components/layout/Loader";
 import Toast from "../components/layout/Toast";
 import WeatherIcon from "../components/layout/WeatherIcon";
-import OutfitCard from "../components/outfit/OutfitCard";
-
-function buildCardData(suggestion, weather) {
-  // whyItWorks is shown in the side panel, so keep it off the card to avoid
-  // repeating the same reasons twice.
-  return {
-    id: "suggestion",
-    name: suggestion.name || buildOutfitName(suggestion.vibe, weather),
-    itemIdsByType: suggestion.itemIdsByType,
-    previewOrder: suggestion.previewOrder,
-    weatherSnapshot: weather ?? null,
-    vibe: suggestion.vibe,
-  };
-}
+import OutfitPreview from "../components/outfit/OutfitPreview";
 
 export default function TodayPage() {
   const navigate = useNavigate();
@@ -307,66 +294,77 @@ export default function TodayPage() {
       )}
 
       {suggestion && (
-        <Grid container spacing={1.8} ref={resultRef} sx={{ scrollMarginTop: 16 }}>
-          <Grid item xs={12} md={7}>
-            <OutfitCard outfit={buildCardData(suggestion, weather)} clothesById={clothesById} />
-          </Grid>
-          <Grid item xs={12} md={5}>
-            <Card sx={{ p: 2, height: "100%" }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-                <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                  Why this works
-                </Typography>
-                <Chip
-                  size="small"
-                  label={suggestionSource === "ai" ? "AI stylist" : "Built-in"}
-                  color={suggestionSource === "ai" ? "secondary" : "default"}
-                  variant={suggestionSource === "ai" ? "filled" : "outlined"}
-                />
-              </Stack>
-              <Box component="ul" sx={{ mb: 1.5, pl: 2.5 }}>
-                {occasion && (
-                  <li>
-                    <Typography variant="body2">Styled for: {occasion}.</Typography>
-                  </li>
-                )}
-                {(suggestion.whyItWorks || []).map((reason) => (
-                  <li key={reason}>
-                    <Typography variant="body2">{reason}</Typography>
-                  </li>
-                ))}
-              </Box>
-              <Stack spacing={1}>
+        <Box
+          ref={resultRef}
+          sx={{
+            display: "flex",
+            flexDirection: { xs: "column", md: "row" },
+            gap: 2,
+            alignItems: "flex-start",
+            scrollMarginTop: 16,
+          }}
+        >
+          <Card sx={{ flex: 1, minWidth: 0, width: "100%", p: 2 }}>
+            <Typography variant="h6" sx={{ mb: 1.5 }}>
+              {suggestion.name || buildOutfitName(vibe, weather)}
+            </Typography>
+            <OutfitPreview itemIdsByType={suggestion.itemIdsByType} clothesById={clothesById} />
+          </Card>
+
+          <Card sx={{ width: { xs: "100%", md: 320 }, flexShrink: 0, p: 2 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+              <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                Why this works
+              </Typography>
+              <Chip
+                size="small"
+                label={suggestionSource === "ai" ? "AI stylist" : "Built-in"}
+                color={suggestionSource === "ai" ? "secondary" : "default"}
+                variant={suggestionSource === "ai" ? "filled" : "outlined"}
+              />
+            </Stack>
+            <Box component="ul" sx={{ mb: 1.5, pl: 2.5 }}>
+              {occasion && (
+                <li>
+                  <Typography variant="body2">Styled for: {occasion}.</Typography>
+                </li>
+              )}
+              {(suggestion.whyItWorks || []).map((reason) => (
+                <li key={reason}>
+                  <Typography variant="body2">{reason}</Typography>
+                </li>
+              ))}
+            </Box>
+            <Stack spacing={1}>
+              <Button
+                variant="contained"
+                startIcon={<TodayIcon />}
+                onClick={() => saveOutfit({ wearToday: true })}
+              >
+                Wear today
+              </Button>
+              <Stack direction="row" spacing={1}>
                 <Button
-                  variant="contained"
-                  startIcon={<TodayIcon />}
-                  onClick={() => saveOutfit({ wearToday: true })}
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<ShuffleIcon />}
+                  onClick={() => generate(occasion)}
+                  disabled={generating}
                 >
-                  Wear today
+                  Shuffle
                 </Button>
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    startIcon={<ShuffleIcon />}
-                    onClick={() => generate(occasion)}
-                    disabled={generating}
-                  >
-                    Shuffle
-                  </Button>
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    startIcon={<BookmarkBorderIcon />}
-                    onClick={() => saveOutfit()}
-                  >
-                    Save
-                  </Button>
-                </Stack>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<BookmarkBorderIcon />}
+                  onClick={() => saveOutfit()}
+                >
+                  Save
+                </Button>
               </Stack>
-            </Card>
-          </Grid>
-        </Grid>
+            </Stack>
+          </Card>
+        </Box>
       )}
 
       <Toast
