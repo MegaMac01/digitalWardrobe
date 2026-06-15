@@ -33,7 +33,7 @@ If "lockedItemIds" is non-empty, those items are already chosen by the user: you
 
 Choose ONLY from the provided items, by their exact "id". Never invent items or ids. If a slot can't be filled sensibly, omit it.
 
-Respond ONLY with the structured object: a short catchy outfit name, the chosen item ids, and 2-4 concise reasons grounded in the principles above.`;
+Respond ONLY with the structured object: a short catchy outfit name, the chosen item ids, and 3-5 short reasons that explain WHY this is a good outfit. Name the colour pairing and why it works together, how the dressiness suits the occasion and time of day, how it handles the weather, and any nice styling touch. Write them as clear, friendly sentences, not single words.`;
 
 const OUTFIT_SCHEMA = {
   type: "object",
@@ -49,7 +49,8 @@ const OUTFIT_SCHEMA = {
     },
     whyItWorks: {
       type: "array",
-      description: "2-4 concise reasons the outfit suits the weather and occasion.",
+      description:
+        "3-5 short, friendly sentences explaining WHY this is a good outfit: the colour pairing and why it works, how the dressiness fits the occasion and time of day, how it handles the weather, and any nice styling touch.",
       items: { type: "string" },
     },
   },
