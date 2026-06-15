@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import {
   Box,
   Button,
@@ -56,6 +57,7 @@ export default function OutfitCard({
   outfit,
   clothesById = {},
   onDelete,
+  onEdit,
   onSaveSuggestion,
   onSchedule,
   onUnschedule,
@@ -155,6 +157,13 @@ export default function OutfitCard({
           </>
         )}
         <Box sx={{ flexGrow: 1 }} />
+        {onEdit && (
+          <Tooltip title="Edit outfit">
+            <IconButton size="small" onClick={() => onEdit(outfit)}>
+              <EditOutlinedIcon />
+            </IconButton>
+          </Tooltip>
+        )}
         {onDelete && (
           <Tooltip title="Delete outfit">
             <IconButton color="error" size="small" onClick={() => onDelete(outfit.id)}>

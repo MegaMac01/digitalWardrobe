@@ -2,32 +2,12 @@ import React, { useMemo, useState } from "react";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { Alert, Box, Card, CardContent, Chip, IconButton, Stack, Typography } from "@mui/material";
+import { toISODate, buildScheduleMap } from "../../utils/helpers";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function formatMonthTitle(date) {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
-
-function toISODate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildScheduleMap(outfits) {
-  const map = {};
-  outfits.forEach((outfit) => {
-    const dates = outfit.scheduledDates || [];
-    dates.forEach((dateISO) => {
-      if (!map[dateISO]) {
-        map[dateISO] = [];
-      }
-      map[dateISO].push(outfit);
-    });
-  });
-  return map;
 }
 
 export default function OutfitCalendar({ outfits, onReschedule }) {

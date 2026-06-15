@@ -1,12 +1,6 @@
 import React, { useMemo } from "react";
-import { Alert, Box, Card, CardContent, Chip, Grid, Stack, Typography } from "@mui/material";
-
-function toISODate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+import { Box, Card, CardContent, Chip, Grid, Stack, Typography } from "@mui/material";
+import { toISODate, buildScheduleMap } from "../../utils/helpers";
 
 function buildNextDays(count = 7) {
   const today = new Date();
@@ -19,17 +13,6 @@ function buildNextDays(count = 7) {
     });
   }
   return days;
-}
-
-function buildScheduleMap(outfits) {
-  const map = {};
-  outfits.forEach((outfit) => {
-    (outfit.scheduledDates || []).forEach((dateISO) => {
-      if (!map[dateISO]) map[dateISO] = [];
-      map[dateISO].push(outfit);
-    });
-  });
-  return map;
 }
 
 export default function OutfitAgenda({ outfits, onUnschedule }) {
@@ -94,12 +77,6 @@ export default function OutfitAgenda({ outfits, onUnschedule }) {
             );
           })}
         </Grid>
-
-        {conflictCount > 0 && (
-          <Alert severity="warning" sx={{ mt: 1.2 }}>
-            Some days have multiple outfits scheduled. Drag outfits on the calendar or remove one to resolve.
-          </Alert>
-        )}
       </CardContent>
     </Card>
   );

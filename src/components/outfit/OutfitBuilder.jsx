@@ -15,10 +15,12 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import { useClothes } from "../../hooks/useClothes";
 import { useOutfits } from "../../hooks/useOutfits";
 import { useWeather } from "../../hooks/useWeather";
 import Loader from "../layout/Loader";
+import EmptyState from "../layout/EmptyState";
 import Toast from "../layout/Toast";
 import {
   buildOutfitName,
@@ -59,6 +61,7 @@ function moveTypeByStep(order, type, step) {
 }
 
 export default function OutfitBuilder() {
+  const navigate = useNavigate();
   const { clothes, groupedByType, loading } = useClothes();
   const { addOutfit } = useOutfits();
   const { weather } = useWeather();
@@ -140,6 +143,17 @@ export default function OutfitBuilder() {
 
   if (loading) {
     return <Loader />;
+  }
+
+  if (clothes.length === 0) {
+    return (
+      <EmptyState
+        title="Nothing to build with yet"
+        description="The outfit builder needs clothes to work with. Add a few pieces to your wardrobe first, then come back to mix and match."
+        actionLabel="Add clothes"
+        onAction={() => navigate("/")}
+      />
+    );
   }
 
   return (

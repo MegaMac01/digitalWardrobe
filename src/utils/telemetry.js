@@ -30,6 +30,9 @@ export async function logClientError(errorLike, context = {}) {
       return;
     }
 
+    const now = Date.now();
+    // expiresAt enables a Firestore TTL policy to auto-delete after 30 days.
+    // Set it up in Firebase Console: Firestore → Indexes → TTL, field: expiresAt
     await addDoc(collection(db, "client_errors"), {
       message: message.slice(0, 400),
       stack: typeof errorLike?.stack === "string" ? errorLike.stack.slice(0, 4000) : "",
@@ -38,7 +41,8 @@ export async function logClientError(errorLike, context = {}) {
       metadata: JSON.stringify(context.metadata ?? {}).slice(0, 3000),
       route: window.location?.pathname ?? "",
       userAgent: navigator.userAgent.slice(0, 250),
-      createdAtMs: Date.now(),
+      createdAtMs: now,
+      expiresAt: new Date(now + 30 * 24 * 60 * 60 * 1000),
     });
   } catch {
     // Never block user actions because of telemetry errors.

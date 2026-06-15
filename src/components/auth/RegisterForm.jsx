@@ -89,6 +89,7 @@ export default function RegisterForm() {
               onChange={(event) => setPassword(event.target.value)}
               required
               autoComplete="new-password"
+              helperText="At least 8 characters, with an uppercase letter, a lowercase letter, and a number."
             />
             <Button type="submit" variant="contained" disabled={submitting}>
               Create Account

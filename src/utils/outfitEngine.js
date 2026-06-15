@@ -13,6 +13,17 @@ export const VIBE_OPTIONS = [
 
 export const SEASON_OPTIONS = ["Any", "Spring", "Summer", "Autumn", "Winter"];
 
+// One-tap occasion presets for the Today home screen.
+export const OCCASION_PRESETS = [
+  "Work",
+  "Casual",
+  "Gym",
+  "Dinner",
+  "Beach",
+  "Errands",
+  "Night out",
+];
+
 const COLOR_FAMILIES = {
   neutral: ["black", "white", "gray", "grey", "beige", "cream", "ivory", "tan", "khaki", "brown"],
   blue: ["blue", "navy", "teal", "azure", "cobalt"],
@@ -115,16 +126,16 @@ function scoreForWeather(item, weather) {
   return { score, reasons };
 }
 
-function scoreForColorHarmony(item, selectedItems) {
-  const thisFamily = getColorFamily(item.color);
-  if (thisFamily === "unknown") {
+// Uses pre-computed color family maps to avoid redundant string scanning per call.
+function scoreForColorHarmony(itemFamily, selectedItems, colorFamilyCache) {
+  if (itemFamily === "unknown") {
     return { score: 0, reasons: [] };
   }
 
   let score = 0;
   const reasons = [];
   const existingFamilies = Object.values(selectedItems)
-    .map((selected) => getColorFamily(selected?.color))
+    .map((selected) => (selected ? colorFamilyCache.get(selected.id) ?? "unknown" : "unknown"))
     .filter((family) => family !== "unknown");
 
   if (existingFamilies.length === 0) {
@@ -132,19 +143,19 @@ function scoreForColorHarmony(item, selectedItems) {
   }
 
   existingFamilies.forEach((family) => {
-    if (family === thisFamily) {
+    if (family === itemFamily) {
       score += 1;
       reasons.push("Color palette stays cohesive.");
       return;
     }
 
-    if (family === "neutral" || thisFamily === "neutral") {
+    if (family === "neutral" || itemFamily === "neutral") {
       score += 2;
       reasons.push("Neutral pairing keeps the look versatile.");
       return;
     }
 
-    if (COMPLEMENTARY[thisFamily]?.includes(family) || COMPLEMENTARY[family]?.includes(thisFamily)) {
+    if (COMPLEMENTARY[itemFamily]?.includes(family) || COMPLEMENTARY[family]?.includes(itemFamily)) {
       score += 3;
       reasons.push("Complementary colors add contrast.");
       return;
@@ -156,12 +167,12 @@ function scoreForColorHarmony(item, selectedItems) {
   return { score, reasons };
 }
 
-function scoreItem(item, { vibe, weather, selectedItems }) {
+// season and colorFamilyCache are pre-computed once per buildSuggestedOutfit call.
+function scoreItem(item, { vibe, weather, selectedItems, season, colorFamilyCache }) {
   let score = 10;
   const reasons = [];
   const itemVibes = item.vibes ?? [];
   const seasonTags = item.seasonTags ?? ["Any"];
-  const season = getCurrentSeason();
 
   if (item.favorite) {
     score += 3;
@@ -188,7 +199,8 @@ function scoreItem(item, { vibe, weather, selectedItems }) {
   score += weatherResult.score;
   reasons.push(...weatherResult.reasons);
 
-  const colorResult = scoreForColorHarmony(item, selectedItems);
+  const itemFamily = colorFamilyCache.get(item.id) ?? "unknown";
+  const colorResult = scoreForColorHarmony(itemFamily, selectedItems, colorFamilyCache);
   score += colorResult.score;
   reasons.push(...colorResult.reasons);
 
@@ -238,6 +250,10 @@ function buildWhyItWorks(explanationsByType, vibe, weather) {
 }
 
 export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } = {}) {
+  // Pre-compute once so scoreItem and scoreForColorHarmony don't repeat this work per candidate.
+  const season = getCurrentSeason();
+  const colorFamilyCache = new Map(clothes.map((item) => [item.id, getColorFamily(item.color)]));
+
   const grouped = TYPE_ORDER.reduce((acc, type) => {
     acc[type] = clothes.filter((item) => item.type === type);
     return acc;
@@ -248,7 +264,7 @@ export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } =
   const explanationsByType = {};
   const required = ["Shirt", "Pants", "Shoes"];
   const missingRequired = [];
-  const context = { vibe, weather };
+  const context = { vibe, weather, season, colorFamilyCache };
   let matchScore = 0;
 
   required.forEach((type) => {

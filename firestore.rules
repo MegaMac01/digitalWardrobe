@@ -1,12 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
     function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+      return request.auth != null && request.auth.uid == uid;
     }
 
     function isString(value, maxLen) {
@@ -18,8 +14,7 @@ service cloud.firestore {
     }
 
     function validClothingData(data) {
-      return data.keys().hasAll(['uid', 'type', 'imageUrl', 'storagePath', 'createdAtMs'])
-        && isOwner(data.uid)
+      return data.keys().hasAll(['type', 'imageUrl', 'storagePath', 'createdAtMs'])
         && isString(data.type, 32)
         && isString(data.imageUrl, 2000)
         && isString(data.storagePath, 240)
@@ -34,8 +29,7 @@ service cloud.firestore {
     }
 
     function validOutfitData(data) {
-      return data.keys().hasAll(['uid', 'name', 'itemIdsByType', 'createdAtMs'])
-        && isOwner(data.uid)
+      return data.keys().hasAll(['name', 'itemIdsByType', 'createdAtMs'])
         && isString(data.name, 60)
         && data.itemIdsByType is map
         && data.createdAtMs is int
@@ -45,20 +39,22 @@ service cloud.firestore {
         && (!data.keys().hasAny(['scheduledDates']) || isStringList(data.scheduledDates, 120));
     }
 
-    match /clothes/{docId} {
-      allow create: if validClothingData(request.resource.data);
-      allow read, delete: if isOwner(resource.data.uid);
-      allow update: if isOwner(resource.data.uid) && validClothingData(request.resource.data);
-    }
+    match /users/{uid} {
+      match /clothes/{docId} {
+        allow create: if isOwner(uid) && validClothingData(request.resource.data);
+        allow read, delete: if isOwner(uid);
+        allow update: if isOwner(uid) && validClothingData(request.resource.data);
+      }
 
-    match /outfits/{docId} {
-      allow create: if validOutfitData(request.resource.data);
-      allow read, delete: if isOwner(resource.data.uid);
-      allow update: if isOwner(resource.data.uid) && validOutfitData(request.resource.data);
+      match /outfits/{docId} {
+        allow create: if isOwner(uid) && validOutfitData(request.resource.data);
+        allow read, delete: if isOwner(uid);
+        allow update: if isOwner(uid) && validOutfitData(request.resource.data);
+      }
     }
 
     match /client_errors/{docId} {
-      allow create: if isSignedIn();
+      allow create: if request.auth != null;
       allow read: if false;
       allow update, delete: if false;
     }

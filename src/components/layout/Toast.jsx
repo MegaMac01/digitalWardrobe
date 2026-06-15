@@ -6,17 +6,23 @@ export default function Toast({
   message,
   severity = "info",
   onClose,
-  autoHideDuration = 2800,
+  action,
+  autoHideDuration,
 }) {
+  // Give the user longer to react when there's an action (e.g. Undo).
+  const duration = autoHideDuration ?? (action ? 6000 : 2800);
+
   return (
     <Snackbar
       open={open}
-      autoHideDuration={autoHideDuration}
+      autoHideDuration={duration}
       onClose={onClose}
       anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      sx={{ bottom: { xs: 72, md: 24 } }}
     >
       <Alert
-        onClose={onClose}
+        onClose={action ? undefined : onClose}
+        action={action}
         severity={severity}
         variant="filled"
         sx={{ width: "100%" }}

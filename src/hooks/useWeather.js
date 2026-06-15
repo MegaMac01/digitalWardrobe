@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { logClientError } from "../utils/telemetry";
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 const WEATHER_LABELS = {
   0: "Clear",
@@ -76,12 +78,14 @@ export function useWeather() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [coords, setCoords] = useState(null);
+  const lastFetchedAt = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!coords) return;
     setLoading(true);
     try {
       const next = await fetchWeatherByCoords(coords);
+      lastFetchedAt.current = Date.now();
       setWeather(next);
       setError("");
     } catch (weatherError) {
@@ -101,11 +105,10 @@ export function useWeather() {
     setLoading(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const nextCoords = {
+        setCoords({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
-        };
-        setCoords(nextCoords);
+        });
       },
       () => {
         logClientError("Geolocation permission denied", {
@@ -119,8 +122,11 @@ export function useWeather() {
     );
   }, []);
 
+  // Auto-fetch when coords become available, but skip if data is still fresh.
+  // The manual "Refresh Weather" button calls refresh() directly, bypassing the cache.
   useEffect(() => {
     if (!coords) return;
+    if (Date.now() - lastFetchedAt.current < CACHE_TTL_MS) return;
     refresh();
   }, [coords, refresh]);
 
