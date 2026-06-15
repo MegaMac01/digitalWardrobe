@@ -1,17 +1,30 @@
 {
-  "name": "Vintage Digital Wardrobe",
+  "name": "The Vintage Wardrobe",
   "short_name": "Wardrobe",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f5eddc",
   "theme_color": "#6f4b32",
-  "description": "Upload clothes, plan outfits, and schedule your style calendar.",
+  "description": "Upload clothes, plan outfits, and get AI outfit suggestions for your weather and plans.",
   "icons": [
     {
-      "src": "/vite.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

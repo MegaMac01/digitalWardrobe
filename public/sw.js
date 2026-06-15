@@ -1,5 +1,5 @@
-const CACHE_VERSION = "wardrobe-cache-v1";
-const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/vite.svg"];
+const CACHE_VERSION = "wardrobe-cache-v2";
+const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
