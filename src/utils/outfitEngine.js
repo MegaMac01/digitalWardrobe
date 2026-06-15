@@ -319,7 +319,7 @@ function buildWhyItWorks(explanationsByType, vibe, weather) {
   return [...new Set(reasons)].slice(0, 6);
 }
 
-export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } = {}) {
+export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null, locked = [] } = {}) {
   // Pre-compute once so scoreItem and scoreForColorHarmony don't repeat this work per candidate.
   const season = getCurrentSeason();
   const colorFamilyCache = new Map(clothes.map((item) => [item.id, getColorFamily(item.color)]));
@@ -331,6 +331,17 @@ export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } =
   const usedIds = new Set();
   const explanationsByType = {};
   let matchScore = 0;
+
+  // Pre-place any locked items, so we build the rest of the outfit around them.
+  locked.forEach((item) => {
+    if (item?.id) {
+      selected[item.type] = item;
+      usedIds.add(item.id);
+    }
+  });
+
+  const roleFilled = (role) =>
+    TYPE_ORDER.some((type) => TYPE_ROLE[type] === role && selected[type]);
 
   function take(items) {
     const result = pickBestItem(items, context, usedIds, selected);
@@ -348,34 +359,48 @@ export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } =
   const dresses = byRole("onepiece");
   const canSeparates = bases.length > 0 && bottoms.length > 0;
 
-  // A dress covers the base+bottom roles. Use one when separates aren't both
-  // available, and occasionally for variety when they are.
-  if (dresses.length > 0 && (!canSeparates || Math.random() < 0.4)) {
-    take(dresses);
-  } else {
-    take(bases);
-    take(bottoms);
+  // Core: a dress covers base+bottom. Only fill roles not already locked.
+  if (!roleFilled("onepiece")) {
+    if (!roleFilled("base") && !roleFilled("bottom")) {
+      if (dresses.length > 0 && (!canSeparates || Math.random() < 0.4)) {
+        take(dresses);
+      } else {
+        take(bases);
+        take(bottoms);
+      }
+    } else {
+      if (!roleFilled("base")) take(bases);
+      if (!roleFilled("bottom")) take(bottoms);
+    }
   }
 
-  take(byRole("footwear"));
+  if (!roleFilled("footwear")) take(byRole("footwear"));
 
   // Mid layer (sweater/hoodie): always when cold, sometimes in mild weather.
-  if (weather?.isCold) {
-    take(byRole("mid"));
-  } else if (!weather?.isHot && Math.random() < 0.3) {
-    take(byRole("mid"));
+  if (!roleFilled("mid")) {
+    if (weather?.isCold) {
+      take(byRole("mid"));
+    } else if (!weather?.isHot && Math.random() < 0.3) {
+      take(byRole("mid"));
+    }
   }
 
   // Outer layer for cold/wet/windy conditions.
-  if (weather?.isCold || weather?.isWindy || weather?.isRaining) {
+  if (!roleFilled("outer") && (weather?.isCold || weather?.isWindy || weather?.isRaining)) {
     take(byRole("outer"));
   }
 
-  // Finish with up to two accessories, each a different type.
-  const firstAccessories = byRole("accessory").filter((item) => !selected[item.type]);
-  if (firstAccessories.length > 0 && Math.random() < 0.55) take(firstAccessories);
-  const secondAccessories = byRole("accessory").filter((item) => !selected[item.type]);
-  if (secondAccessories.length > 0 && Math.random() < 0.3) take(secondAccessories);
+  // Finish with up to two accessories (counting any locked), each a different type.
+  const accessoryCount = () =>
+    Object.keys(selected).filter((type) => TYPE_ROLE[type] === "accessory").length;
+  if (accessoryCount() < 2) {
+    const pool = byRole("accessory").filter((item) => !selected[item.type]);
+    if (pool.length > 0 && Math.random() < 0.55) take(pool);
+  }
+  if (accessoryCount() < 2) {
+    const pool = byRole("accessory").filter((item) => !selected[item.type]);
+    if (pool.length > 0 && Math.random() < 0.3) take(pool);
+  }
 
   const itemIdsByType = {};
   const itemsByType = {};

@@ -1,142 +1,238 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
-import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
-import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
+import ShuffleIcon from "@mui/icons-material/Shuffle";
+import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import AddIcon from "@mui/icons-material/Add";
+import TodayIcon from "@mui/icons-material/Today";
+import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import {
   Alert,
   Box,
   Button,
   Card,
+  CardContent,
   CardMedia,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Grid,
   IconButton,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
 import { useClothes } from "../../hooks/useClothes";
 import { useOutfits } from "../../hooks/useOutfits";
 import { useWeather } from "../../hooks/useWeather";
-import Loader from "../layout/Loader";
-import EmptyState from "../layout/EmptyState";
-import Toast from "../layout/Toast";
+import { suggestOutfit } from "../../utils/aiStylist";
 import {
   buildOutfitName,
   buildSuggestedOutfit,
   missingEssentials,
+  FORMALITY_OPTIONS,
   TYPE_ORDER,
+  TYPE_ROLE,
   VIBE_OPTIONS,
 } from "../../utils/outfitEngine";
-import { logClientError } from "../../utils/telemetry";
+import { toISODate, formatTemp } from "../../utils/helpers";
 import { sanitizeText, validateOutfitName } from "../../utils/validation";
+import { logClientError } from "../../utils/telemetry";
+import Loader from "../layout/Loader";
+import EmptyState from "../layout/EmptyState";
+import Toast from "../layout/Toast";
 
-function reorderTypes(order, draggingType, targetType) {
-  if (!draggingType || draggingType === targetType) {
-    return order;
-  }
+// Visual order is top-of-body to bottom, then accessories.
+const SLOTS = [
+  { key: "outer", label: "Outer layer", roles: ["outer"], optional: true },
+  { key: "mid", label: "Mid layer", roles: ["mid"], optional: true },
+  { key: "top", label: "Top or dress", roles: ["base", "onepiece"] },
+  { key: "bottom", label: "Bottom", roles: ["bottom"] },
+  { key: "footwear", label: "Shoes", roles: ["footwear"] },
+  { key: "accessory", label: "Accessories", roles: ["accessory"], optional: true, multi: true },
+];
 
-  const next = [...order];
-  const dragIndex = next.indexOf(draggingType);
-  const targetIndex = next.indexOf(targetType);
-  if (dragIndex < 0 || targetIndex < 0) {
-    return order;
-  }
+const CHECKER_BG = {
+  backgroundColor: "#efe7d6",
+  backgroundImage:
+    "linear-gradient(45deg, rgba(111,75,50,0.1) 25%, transparent 25%), linear-gradient(-45deg, rgba(111,75,50,0.1) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(111,75,50,0.1) 75%), linear-gradient(-45deg, transparent 75%, rgba(111,75,50,0.1) 75%)",
+  backgroundSize: "16px 16px",
+  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
+};
 
-  next.splice(dragIndex, 1);
-  next.splice(targetIndex, 0, draggingType);
-  return next;
-}
-
-function moveTypeByStep(order, type, step) {
-  const currentIndex = order.indexOf(type);
-  const targetIndex = currentIndex + step;
-  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= order.length) {
-    return order;
-  }
-  const next = [...order];
-  next.splice(currentIndex, 1);
-  next.splice(targetIndex, 0, type);
-  return next;
+function formalityWord(items) {
+  const values = items.map((item) => Number(item.formality ?? 3)).filter(Boolean);
+  if (values.length === 0) return null;
+  const avg = Math.round(values.reduce((sum, v) => sum + v, 0) / values.length);
+  const match = FORMALITY_OPTIONS.find((option) => option.value === avg);
+  return match ? match.label.split(" - ")[1] : null;
 }
 
 export default function OutfitBuilder() {
   const navigate = useNavigate();
-  const { clothes, groupedByType, loading } = useClothes();
+  const { clothes, loading } = useClothes();
   const { addOutfit } = useOutfits();
   const { weather } = useWeather();
 
-  const [selected, setSelected] = useState({});
-  const [previewOrder, setPreviewOrder] = useState(TYPE_ORDER);
-  const [draggingType, setDraggingType] = useState(null);
+  const [selected, setSelected] = useState({}); // type -> itemId
+  const [locked, setLocked] = useState(() => new Set()); // types
   const [vibe, setVibe] = useState("Any");
   const [name, setName] = useState("");
-  const [notes, setNotes] = useState("");
+  const [styling, setStyling] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [picker, setPicker] = useState(null); // slot config or null
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
 
+  const clothesById = useMemo(() => {
+    const map = new Map();
+    clothes.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [clothes]);
+
   const selectedItems = useMemo(() => {
-    return TYPE_ORDER.reduce((acc, type) => {
-      acc[type] = clothes.find((item) => item.id === selected[type]) ?? null;
-      return acc;
-    }, {});
-  }, [clothes, selected]);
+    const map = {};
+    Object.entries(selected).forEach(([type, id]) => {
+      const item = clothesById.get(id);
+      if (item) map[type] = item;
+    });
+    return map;
+  }, [selected, clothesById]);
 
-  const missingRequired = missingEssentials(selectedItems);
+  const itemsList = useMemo(() => Object.values(selectedItems), [selectedItems]);
+  const hasOnepiece = itemsList.some((item) => TYPE_ROLE[item.type] === "onepiece");
+  const missing = missingEssentials(selectedItems);
+  const colors = [...new Set(itemsList.map((item) => item.color).filter(Boolean))];
+  const dressiness = formalityWord(itemsList);
 
-  function handleSelect(type, itemId) {
-    setSelected((prev) => ({ ...prev, [type]: prev[type] === itemId ? null : itemId }));
+  function applySelection(itemIdsByType) {
+    const next = {};
+    Object.entries(itemIdsByType).forEach(([type, id]) => {
+      if (id) next[type] = id;
+    });
+    setSelected(next);
   }
 
-  function handleAutoSuggest() {
-    const suggestion = buildSuggestedOutfit(clothes, { vibe, weather });
-    setSelected(suggestion.itemIdsByType);
-    if (suggestion.previewOrder?.length) {
-      const remaining = TYPE_ORDER.filter((type) => !suggestion.previewOrder.includes(type));
-      setPreviewOrder([...suggestion.previewOrder, ...remaining]);
-    }
-    if (!name) {
-      setName(buildOutfitName(vibe, weather));
+  function setPick(item) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      const role = TYPE_ROLE[item.type];
+      const clearRoles = {
+        onepiece: ["onepiece", "base", "bottom"],
+        base: ["base", "onepiece"],
+        bottom: ["bottom", "onepiece"],
+        mid: ["mid"],
+        outer: ["outer"],
+        footwear: ["footwear"],
+        accessory: [],
+      }[role] ?? [role];
+
+      Object.keys(next).forEach((type) => {
+        if (clearRoles.includes(TYPE_ROLE[type])) delete next[type];
+      });
+
+      if (role === "accessory") {
+        const accTypes = Object.keys(next).filter((type) => TYPE_ROLE[type] === "accessory");
+        if (accTypes.length >= 2 && !next[item.type]) delete next[accTypes[0]];
+      }
+
+      next[item.type] = item.id;
+      return next;
+    });
+    setPicker(null);
+  }
+
+  function removeType(type) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      delete next[type];
+      return next;
+    });
+    setLocked((prev) => {
+      const next = new Set(prev);
+      next.delete(type);
+      return next;
+    });
+  }
+
+  function toggleLock(type) {
+    setLocked((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
+  function lockedItemIds() {
+    return [...locked].map((type) => selected[type]).filter(Boolean);
+  }
+
+  function lockedItemsList() {
+    return [...locked].map((type) => selectedItems[type]).filter(Boolean);
+  }
+
+  async function handleStyle() {
+    setStyling(true);
+    try {
+      const { suggestion, source } = await suggestOutfit(clothes, {
+        vibe,
+        weather,
+        lockedItemIds: lockedItemIds(),
+      });
+      applySelection(suggestion.itemIdsByType);
+      if (!name) setName(suggestion.name || buildOutfitName(vibe, weather));
+      if (source === "rules") {
+        setToast({ open: true, message: "AI stylist unavailable. Used the built-in engine.", severity: "info" });
+      }
+    } finally {
+      setStyling(false);
     }
   }
 
-  async function handleSave(event) {
-    event.preventDefault();
+  function handleShuffle() {
+    const suggestion = buildSuggestedOutfit(clothes, { vibe, weather, locked: lockedItemsList() });
+    applySelection(suggestion.itemIdsByType);
+    if (!name) setName(buildOutfitName(vibe, weather));
+  }
+
+  async function handleSave({ wearToday } = {}) {
     const nameError = validateOutfitName(name);
     if (nameError) {
       setToast({ open: true, message: nameError, severity: "warning" });
       return;
     }
-    if (missingRequired.length > 0) {
-      setToast({
-        open: true,
-        message: `Pick ${missingRequired.join(", ")} before saving.`,
-        severity: "warning",
-      });
+    if (missing.length > 0) {
+      setToast({ open: true, message: `Add ${missing.join(", ")} first.`, severity: "warning" });
       return;
     }
 
     setSaving(true);
     try {
-      const orderedPreview = previewOrder.filter((type) => selected[type]);
-
       await addOutfit({
         name: sanitizeText(name, 60),
-        notes: sanitizeText(notes, 240),
+        notes: "",
         vibe,
-        itemIdsByType: selected,
-        previewOrder: orderedPreview,
+        itemIdsByType: { ...selected },
+        previewOrder: TYPE_ORDER.filter((type) => selected[type]),
         weatherSnapshot: weather ?? null,
         source: "builder",
+        ...(wearToday ? { scheduledDates: [toISODate(new Date())] } : {}),
       });
-      setSelected({});
-      setName("");
-      setNotes("");
-      setToast({ open: true, message: "Outfit saved.", severity: "success" });
+      setToast({
+        open: true,
+        message: wearToday ? "Saved and added to today's plan." : "Outfit saved.",
+        severity: "success",
+      });
     } catch (error) {
       logClientError(error, { scope: "builder", action: "save-outfit" });
-      setToast({ open: true, message: "Could not save outfit.", severity: "error" });
+      setToast({ open: true, message: "Could not save the outfit.", severity: "error" });
     } finally {
       setSaving(false);
     }
@@ -150,19 +246,23 @@ export default function OutfitBuilder() {
     return (
       <EmptyState
         title="Nothing to build with yet"
-        description="The outfit builder needs clothes to work with. Add a few pieces to your wardrobe first, then come back to mix and match."
+        description="Add a few pieces to your closet, then come back to style them into outfits."
         actionLabel="Add clothes"
-        onAction={() => navigate("/")}
+        onAction={() => navigate("/closet")}
       />
     );
   }
 
+  const pickerItems = picker
+    ? clothes.filter((item) => picker.roles.includes(TYPE_ROLE[item.type]))
+    : [];
+
   return (
     <Box>
       <Stack
-        direction={{ xs: "column", md: "row" }}
+        direction={{ xs: "column", sm: "row" }}
         spacing={1.2}
-        alignItems={{ xs: "stretch", md: "center" }}
+        alignItems={{ xs: "stretch", sm: "center" }}
         sx={{ mb: 2 }}
       >
         <Typography variant="h4" sx={{ flexGrow: 1 }}>
@@ -174,7 +274,7 @@ export default function OutfitBuilder() {
           label="Vibe"
           value={vibe}
           onChange={(event) => setVibe(event.target.value)}
-          sx={{ minWidth: 160 }}
+          sx={{ minWidth: 140 }}
         >
           <MenuItem value="Any">Any</MenuItem>
           {VIBE_OPTIONS.map((option) => (
@@ -184,180 +284,204 @@ export default function OutfitBuilder() {
           ))}
         </TextField>
         <Button
-          variant="outlined"
-          startIcon={<AutoFixHighIcon />}
-          onClick={handleAutoSuggest}
-          disabled={clothes.length === 0}
+          variant="contained"
+          startIcon={styling ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+          onClick={handleStyle}
+          disabled={styling}
         >
-          Auto Pick
+          {styling ? "Styling…" : "Style me"}
+        </Button>
+        <Button variant="outlined" startIcon={<ShuffleIcon />} onClick={handleShuffle} disabled={styling}>
+          Shuffle
         </Button>
       </Stack>
 
-      {weather && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Weather cue: {Math.round(weather.temperature)}°C, {weather.label}.
-        </Alert>
+      {locked.size > 0 && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+          Locked pieces stay put when you Style or Shuffle.
+        </Typography>
       )}
 
       <Grid container spacing={2}>
-        {TYPE_ORDER.map((type) => (
-          <Grid item xs={12} md={6} key={type}>
-            <Card sx={{ p: 1.2 }}>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                {type}
+        {/* The look, slot by slot */}
+        <Grid item xs={12} md={7}>
+          <Stack spacing={1.2}>
+            {SLOTS.map((slot) => {
+              const slotItems = itemsList.filter((item) => slot.roles.includes(TYPE_ROLE[item.type]));
+              const bottomCovered = slot.key === "bottom" && hasOnepiece;
+
+              return (
+                <Card key={slot.key} variant="outlined">
+                  <CardContent sx={{ py: 1.2, "&:last-child": { pb: 1.2 } }}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="subtitle2" sx={{ width: 110, flexShrink: 0 }}>
+                        {slot.label}
+                        {!slot.optional && !bottomCovered && (
+                          <Box component="span" sx={{ color: "error.main" }}>
+                            {" "}
+                            *
+                          </Box>
+                        )}
+                      </Typography>
+
+                      {bottomCovered ? (
+                        <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
+                          Covered by your dress.
+                        </Typography>
+                      ) : slotItems.length > 0 ? (
+                        <Stack direction="row" spacing={1} sx={{ flexGrow: 1, flexWrap: "wrap", rowGap: 1 }}>
+                          {slotItems.map((item) => (
+                            <Stack key={item.id} direction="row" spacing={0.5} alignItems="center">
+                              <CardMedia
+                                component="img"
+                                image={item.imageUrl}
+                                alt={item.type}
+                                sx={{
+                                  width: 56,
+                                  height: 56,
+                                  borderRadius: 1,
+                                  objectFit: "contain",
+                                  ...CHECKER_BG,
+                                }}
+                              />
+                              <Stack>
+                                <Tooltip title={locked.has(item.type) ? "Locked" : "Lock this piece"}>
+                                  <IconButton size="small" onClick={() => toggleLock(item.type)}>
+                                    {locked.has(item.type) ? (
+                                      <LockIcon fontSize="small" color="secondary" />
+                                    ) : (
+                                      <LockOpenIcon fontSize="small" />
+                                    )}
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Remove">
+                                  <IconButton size="small" onClick={() => removeType(item.type)}>
+                                    <DeleteOutlineIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Stack>
+                            </Stack>
+                          ))}
+                          {(slot.multi ? slotItems.length < 2 : false) && (
+                            <Button size="small" startIcon={<AddIcon />} onClick={() => setPicker(slot)}>
+                              Add
+                            </Button>
+                          )}
+                          {!slot.multi && (
+                            <Button size="small" startIcon={<SwapHorizIcon />} onClick={() => setPicker(slot)}>
+                              Swap
+                            </Button>
+                          )}
+                        </Stack>
+                      ) : (
+                        <Button
+                          variant="text"
+                          startIcon={<AddIcon />}
+                          onClick={() => setPicker(slot)}
+                          sx={{ flexGrow: 1, justifyContent: "flex-start", color: "text.secondary" }}
+                        >
+                          Add {slot.label.toLowerCase()}
+                        </Button>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </Stack>
+        </Grid>
+
+        {/* Read-out + save */}
+        <Grid item xs={12} md={5}>
+          <Card sx={{ p: 2, position: { md: "sticky" }, top: { md: 88 } }}>
+            {weather && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {formatTemp(weather.temperature)} · {weather.label}
               </Typography>
-              <Grid container spacing={1}>
-                {groupedByType[type]?.length ? (
-                  groupedByType[type].map((item) => (
-                    <Grid item xs={4} sm={3} key={item.id}>
-                      <Card
-                        onClick={() => handleSelect(type, item.id)}
-                        sx={{
-                          cursor: "pointer",
-                          overflow: "hidden",
-                          border:
-                            selected[type] === item.id
-                              ? "2px solid rgba(111,75,50,0.9)"
-                              : "1px solid transparent",
-                        }}
-                      >
-                        <CardMedia
-                          component="img"
-                          image={item.imageUrl}
-                          alt={item.type}
-                          loading="lazy"
-                          decoding="async"
-                          sx={{ aspectRatio: "1 / 1", objectFit: "cover" }}
-                        />
-                      </Card>
-                    </Grid>
-                  ))
-                ) : (
-                  <Grid item xs={12}>
-                    <Typography variant="body2" color="text.secondary">
-                      No {type.toLowerCase()} items yet.
-                    </Typography>
-                  </Grid>
-                )}
-              </Grid>
-            </Card>
-          </Grid>
-        ))}
+            )}
+
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1, mb: 1.5 }}>
+              <Chip
+                size="small"
+                color={missing.length === 0 ? "success" : "warning"}
+                label={missing.length === 0 ? "Ready to wear" : `Add ${missing.join(", ")}`}
+              />
+              {dressiness && <Chip size="small" variant="outlined" label={dressiness} />}
+              {colors.map((color) => (
+                <Chip key={color} size="small" variant="outlined" label={color} />
+              ))}
+            </Stack>
+
+            <TextField
+              label="Outfit name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              fullWidth
+              size="small"
+              sx={{ mb: 1.5 }}
+            />
+
+            <Stack spacing={1}>
+              <Button
+                variant="contained"
+                startIcon={<TodayIcon />}
+                onClick={() => handleSave({ wearToday: true })}
+                disabled={saving}
+              >
+                Wear today
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<BookmarkBorderIcon />}
+                onClick={() => handleSave()}
+                disabled={saving}
+              >
+                Save outfit
+              </Button>
+            </Stack>
+          </Card>
+        </Grid>
       </Grid>
 
-      <Card component="form" onSubmit={handleSave} sx={{ mt: 3, p: 2 }}>
-        <Typography variant="h5" sx={{ mb: 1 }}>
-          Save This Outfit
-        </Typography>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
-          <TextField
-            label="Outfit Name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            fullWidth
-            required
-          />
-          <TextField
-            label="Notes"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            fullWidth
-          />
-          <Button type="submit" variant="contained" disabled={saving}>
-            {saving ? "Saving..." : "Save"}
-          </Button>
-        </Stack>
-      </Card>
-
-      <Card sx={{ mt: 2.2, p: 2 }}>
-        <Typography variant="h6" sx={{ mb: 1.2 }}>
-          Preview
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Drag pieces to reorder how this outfit is displayed in saved cards.
-        </Typography>
-        <Grid container spacing={1}>
-          {previewOrder.map((type) => (
-            <Grid item xs={6} sm={4} md={2} key={type}>
-              <Typography
-                variant="caption"
-                sx={{ fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 0.5 }}
-              >
-                ::
-                {type}
-              </Typography>
-              <Stack direction="row" spacing={0.4} sx={{ mt: 0.2, mb: 0.2 }}>
-                <IconButton
-                  size="small"
-                  onClick={() => setPreviewOrder((prev) => moveTypeByStep(prev, type, -1))}
-                  aria-label={`Move ${type} earlier`}
-                >
-                  <ArrowBackIosNewIcon fontSize="inherit" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => setPreviewOrder((prev) => moveTypeByStep(prev, type, 1))}
-                  aria-label={`Move ${type} later`}
-                >
-                  <ArrowForwardIosIcon fontSize="inherit" />
-                </IconButton>
-              </Stack>
-              {selectedItems[type] ? (
-                <CardMedia
-                  component="img"
-                  image={selectedItems[type].imageUrl}
-                  alt={type}
-                  loading="lazy"
-                  decoding="async"
-                  draggable
-                  onDragStart={() => setDraggingType(type)}
-                  onDragEnd={() => setDraggingType(null)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    setPreviewOrder((prev) => reorderTypes(prev, draggingType, type));
-                    setDraggingType(null);
-                  }}
-                  sx={{
-                    mt: 0.5,
-                    borderRadius: 1.2,
-                    aspectRatio: "1 / 1",
-                    objectFit: "cover",
-                    cursor: "grab",
-                    opacity: draggingType === type ? 0.5 : 1,
-                  }}
-                />
-              ) : (
-                <Box
-                  draggable
-                  onDragStart={() => setDraggingType(type)}
-                  onDragEnd={() => setDraggingType(null)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    setPreviewOrder((prev) => reorderTypes(prev, draggingType, type));
-                    setDraggingType(null);
-                  }}
-                  sx={{
-                    mt: 0.5,
-                    border: "1px dashed rgba(111,75,50,0.3)",
-                    borderRadius: 1.2,
-                    aspectRatio: "1 / 1",
-                    display: "grid",
-                    placeItems: "center",
-                    color: "text.secondary",
-                    fontSize: 12,
-                    cursor: "grab",
-                    opacity: draggingType === type ? 0.5 : 1,
-                  }}
-                >
-                  Empty
-                </Box>
-              )}
+      {/* Picker */}
+      <Dialog open={Boolean(picker)} onClose={() => setPicker(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{picker ? `Choose ${picker.label.toLowerCase()}` : ""}</DialogTitle>
+        <DialogContent dividers>
+          {pickerItems.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No items for this slot yet. Add some in your closet.
+            </Typography>
+          ) : (
+            <Grid container spacing={1.2}>
+              {pickerItems.map((item) => {
+                const isSelected = selected[item.type] === item.id;
+                return (
+                  <Grid item xs={4} sm={3} key={item.id}>
+                    <Card
+                      onClick={() => setPick(item)}
+                      sx={{
+                        cursor: "pointer",
+                        border: isSelected ? "2px solid" : "1px solid transparent",
+                        borderColor: isSelected ? "secondary.main" : "transparent",
+                      }}
+                    >
+                      <CardMedia
+                        component="img"
+                        image={item.imageUrl}
+                        alt={item.type}
+                        sx={{ aspectRatio: "1 / 1", objectFit: "contain", ...CHECKER_BG }}
+                      />
+                      <Typography variant="caption" sx={{ display: "block", textAlign: "center", py: 0.3 }}>
+                        {item.color || item.type}
+                      </Typography>
+                    </Card>
+                  </Grid>
+                );
+              })}
             </Grid>
-          ))}
-        </Grid>
-      </Card>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Toast
         open={toast.open}

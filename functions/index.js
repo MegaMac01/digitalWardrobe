@@ -29,6 +29,8 @@ Build the outfit on these principles:
 
 Accessories: add 0-2 only when they genuinely complete the look and fit the palette.
 
+If "lockedItemIds" is non-empty, those items are already chosen by the user: you MUST include every locked id in your result and build the rest of the outfit around them, complementing their color and formality. Do not replace or omit a locked item.
+
 Choose ONLY from the provided items, by their exact "id". Never invent items or ids. If a slot can't be filled sensibly, omit it.
 
 Respond ONLY with the structured object: a short catchy outfit name, the chosen item ids, and 2-4 concise reasons grounded in the principles above.`;
@@ -62,7 +64,7 @@ export const suggestOutfit = onCall(
       throw new HttpsError("unauthenticated", "Sign in to get suggestions.");
     }
 
-    const { wardrobe, weather, occasion, timeOfDay, notes, vibe } = request.data || {};
+    const { wardrobe, weather, occasion, timeOfDay, notes, vibe, lockedItemIds } = request.data || {};
     if (!Array.isArray(wardrobe) || wardrobe.length === 0) {
       throw new HttpsError("invalid-argument", "Add some clothes before generating an outfit.");
     }
@@ -78,6 +80,8 @@ export const suggestOutfit = onCall(
         timeOfDay: timeOfDay || "any",
         vibe: vibe || "Any",
         notes: notes || "",
+        // Items the user already chose: keep them and build the rest around them.
+        lockedItemIds: Array.isArray(lockedItemIds) ? lockedItemIds : [],
         wardrobe: wardrobe.slice(0, 200),
       },
       null,

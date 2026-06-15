@@ -80,7 +80,12 @@ function shapeFromItemIds(itemIds, clothes, { vibe, weather, name, whyItWorks })
  * if it is not deployed/configured or errors, falls back to the local rule engine.
  * Returns { suggestion, source: "ai" | "rules" }.
  */
-export async function suggestOutfit(clothes, { vibe = "Any", weather = null, occasion = "", timeOfDay = "", notes = "" } = {}) {
+export async function suggestOutfit(
+  clothes,
+  { vibe = "Any", weather = null, occasion = "", timeOfDay = "", notes = "", lockedItemIds = [] } = {}
+) {
+  const lockedItems = clothes.filter((item) => lockedItemIds.includes(item.id));
+
   try {
     const response = await callSuggestOutfit({
       wardrobe: toWardrobePayload(clothes),
@@ -89,6 +94,7 @@ export async function suggestOutfit(clothes, { vibe = "Any", weather = null, occ
       timeOfDay,
       notes,
       vibe,
+      lockedItemIds,
     });
 
     const data = response.data || {};
@@ -96,9 +102,12 @@ export async function suggestOutfit(clothes, { vibe = "Any", weather = null, occ
       throw new Error("AI returned no items");
     }
 
+    // Locked ids go first so they win the one-per-type de-dupe in shapeFromItemIds.
+    const orderedIds = [...lockedItemIds, ...data.itemIds.filter((id) => !lockedItemIds.includes(id))];
+
     return {
       source: "ai",
-      suggestion: shapeFromItemIds(data.itemIds, clothes, {
+      suggestion: shapeFromItemIds(orderedIds, clothes, {
         vibe,
         weather,
         name: data.name,
@@ -109,7 +118,7 @@ export async function suggestOutfit(clothes, { vibe = "Any", weather = null, occ
     logClientError(error, { scope: "ai-stylist", action: "suggest-outfit-fallback" });
     return {
       source: "rules",
-      suggestion: buildSuggestedOutfit(clothes, { vibe, weather }),
+      suggestion: buildSuggestedOutfit(clothes, { vibe, weather, locked: lockedItems }),
     };
   }
 }
