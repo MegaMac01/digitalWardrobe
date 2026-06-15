@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
-import { buildSuggestedOutfit, buildOutfitName, TYPE_ORDER } from "./outfitEngine";
+import { buildSuggestedOutfit, buildOutfitName, missingEssentials, TYPE_ORDER } from "./outfitEngine";
 import { logClientError } from "./telemetry";
 
 const callSuggestOutfit = httpsCallable(functions, "suggestOutfit");
@@ -30,6 +30,7 @@ function toWardrobePayload(clothes) {
     vibes: item.vibes ?? [],
     seasonTags: item.seasonTags ?? ["Any"],
     warmth: item.warmth ?? 3,
+    formality: item.formality ?? 3,
     isRainFriendly: Boolean(item.isRainFriendly),
     favorite: Boolean(item.favorite),
     notes: item.notes ?? "",
@@ -60,7 +61,7 @@ function shapeFromItemIds(itemIds, clothes, { vibe, weather, name, whyItWorks })
   }, {});
 
   const previewOrder = TYPE_ORDER.filter((type) => itemIdsByType[type]);
-  const missingRequired = ["Shirt", "Pants", "Shoes"].filter((type) => !itemIdsByType[type]);
+  const missingRequired = missingEssentials(itemsByType);
 
   return {
     itemIdsByType,

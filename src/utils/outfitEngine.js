@@ -1,4 +1,59 @@
-export const TYPE_ORDER = ["Shirt", "Pants", "Jacket", "Shoes", "Other"];
+export const TYPE_ORDER = [
+  "Shirt",
+  "Sweater",
+  "Dress",
+  "Pants",
+  "Shorts",
+  "Skirt",
+  "Jacket",
+  "Shoes",
+  "Hat",
+  "Bag",
+  "Accessory",
+  "Other",
+];
+
+// The layer/role each type plays when assembling an outfit. Layers stack
+// base -> mid -> outer; a "onepiece" (dress) covers base + bottom on its own.
+export const TYPE_ROLE = {
+  Shirt: "base",
+  Sweater: "mid",
+  Dress: "onepiece",
+  Pants: "bottom",
+  Shorts: "bottom",
+  Skirt: "bottom",
+  Jacket: "outer",
+  Shoes: "footwear",
+  Hat: "accessory",
+  Bag: "accessory",
+  Accessory: "accessory",
+  Other: "accessory",
+};
+
+// Dressiness scale used for formality coherence (1 = very casual, 5 = formal).
+export const FORMALITY_OPTIONS = [
+  { value: 1, label: "1 - Very casual" },
+  { value: 2, label: "2 - Casual" },
+  { value: 3, label: "3 - Smart casual" },
+  { value: 4, label: "4 - Dressy" },
+  { value: 5, label: "5 - Formal" },
+];
+
+// A wearable outfit needs footwear, plus either a base top and a bottom, or a
+// one-piece dress. Returns human-readable phrases for what's missing.
+export function missingEssentials(itemsByType) {
+  const has = (role) => TYPE_ORDER.some((type) => TYPE_ROLE[type] === role && itemsByType[type]);
+  const missing = [];
+  const hasBase = has("base");
+  const hasBottom = has("bottom");
+  if (!has("onepiece") && !(hasBase && hasBottom)) {
+    if (!hasBase && !hasBottom) missing.push("a top and bottom (or a dress)");
+    else if (!hasBase) missing.push("a top");
+    else missing.push("a bottom");
+  }
+  if (!has("footwear")) missing.push("shoes");
+  return missing;
+}
 
 export const VIBE_OPTIONS = [
   "Classic",
@@ -204,6 +259,21 @@ function scoreItem(item, { vibe, weather, selectedItems, season, colorFamilyCach
   score += colorResult.score;
   reasons.push(...colorResult.reasons);
 
+  // Light formality cohesion: keep the look at one dressiness level.
+  const chosenFormalities = Object.values(selectedItems)
+    .filter(Boolean)
+    .map((sel) => Number(sel.formality ?? 3));
+  if (chosenFormalities.length > 0) {
+    const avg = chosenFormalities.reduce((sum, value) => sum + value, 0) / chosenFormalities.length;
+    const diff = Math.abs(Number(item.formality ?? 3) - avg);
+    if (diff <= 1) {
+      score += 2;
+      reasons.push("Dressiness fits the rest of the look.");
+    } else if (diff >= 2.5) {
+      score -= 4;
+    }
+  }
+
   const uniqueReasons = [...new Set(reasons)];
   return { score, reasons: uniqueReasons.slice(0, 3) };
 }
@@ -253,67 +323,73 @@ export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null } =
   // Pre-compute once so scoreItem and scoreForColorHarmony don't repeat this work per candidate.
   const season = getCurrentSeason();
   const colorFamilyCache = new Map(clothes.map((item) => [item.id, getColorFamily(item.color)]));
+  const context = { vibe, weather, season, colorFamilyCache };
 
-  const grouped = TYPE_ORDER.reduce((acc, type) => {
-    acc[type] = clothes.filter((item) => item.type === type);
-    return acc;
-  }, {});
+  const byRole = (role) => clothes.filter((item) => TYPE_ROLE[item.type] === role);
 
-  const selected = {};
+  const selected = {}; // type -> item
   const usedIds = new Set();
   const explanationsByType = {};
-  const required = ["Shirt", "Pants", "Shoes"];
-  const missingRequired = [];
-  const context = { vibe, weather, season, colorFamilyCache };
   let matchScore = 0;
 
-  required.forEach((type) => {
-    const pickedResult = pickBestItem(grouped[type], context, usedIds, selected);
-    selected[type] = pickedResult?.item ?? null;
-    explanationsByType[type] = pickedResult?.reasons ?? [];
-    matchScore += pickedResult?.score ?? 0;
+  function take(items) {
+    const result = pickBestItem(items, context, usedIds, selected);
+    if (!result?.item?.id) return null;
+    const { item } = result;
+    selected[item.type] = item;
+    usedIds.add(item.id);
+    explanationsByType[item.type] = result.reasons ?? [];
+    matchScore += result.score ?? 0;
+    return item;
+  }
 
-    if (pickedResult?.item?.id) {
-      usedIds.add(pickedResult.item.id);
-    } else {
-      missingRequired.push(type);
-    }
+  const bases = byRole("base");
+  const bottoms = byRole("bottom");
+  const dresses = byRole("onepiece");
+  const canSeparates = bases.length > 0 && bottoms.length > 0;
+
+  // A dress covers the base+bottom roles. Use one when separates aren't both
+  // available, and occasionally for variety when they are.
+  if (dresses.length > 0 && (!canSeparates || Math.random() < 0.4)) {
+    take(dresses);
+  } else {
+    take(bases);
+    take(bottoms);
+  }
+
+  take(byRole("footwear"));
+
+  // Mid layer (sweater/hoodie): always when cold, sometimes in mild weather.
+  if (weather?.isCold) {
+    take(byRole("mid"));
+  } else if (!weather?.isHot && Math.random() < 0.3) {
+    take(byRole("mid"));
+  }
+
+  // Outer layer for cold/wet/windy conditions.
+  if (weather?.isCold || weather?.isWindy || weather?.isRaining) {
+    take(byRole("outer"));
+  }
+
+  // Finish with up to two accessories, each a different type.
+  const firstAccessories = byRole("accessory").filter((item) => !selected[item.type]);
+  if (firstAccessories.length > 0 && Math.random() < 0.55) take(firstAccessories);
+  const secondAccessories = byRole("accessory").filter((item) => !selected[item.type]);
+  if (secondAccessories.length > 0 && Math.random() < 0.3) take(secondAccessories);
+
+  const itemIdsByType = {};
+  const itemsByType = {};
+  Object.entries(selected).forEach(([type, item]) => {
+    itemIdsByType[type] = item.id;
+    itemsByType[type] = item;
   });
 
-  if (weather?.isCold || weather?.isWindy || weather?.isRaining) {
-    const jacketResult = pickBestItem(grouped.Jacket, context, usedIds, selected);
-    selected.Jacket = jacketResult?.item ?? null;
-    explanationsByType.Jacket = jacketResult?.reasons ?? [];
-    matchScore += jacketResult?.score ?? 0;
-
-    if (jacketResult?.item?.id) {
-      usedIds.add(jacketResult.item.id);
-    }
-  }
-
-  const otherResult = pickBestItem(grouped.Other, context, usedIds, selected);
-  if (otherResult?.item?.id && Math.random() > 0.35) {
-    selected.Other = otherResult.item;
-    explanationsByType.Other = otherResult.reasons ?? [];
-    matchScore += otherResult.score ?? 0;
-  }
-
-  const itemIdsByType = TYPE_ORDER.reduce((acc, type) => {
-    acc[type] = selected[type]?.id ?? null;
-    return acc;
-  }, {});
-
   const previewOrder = TYPE_ORDER.filter((type) => itemIdsByType[type]);
-
-  const itemsByType = TYPE_ORDER.reduce((acc, type) => {
-    acc[type] = selected[type] ?? null;
-    return acc;
-  }, {});
 
   return {
     itemIdsByType,
     itemsByType,
-    missingRequired,
+    missingRequired: missingEssentials(selected),
     previewOrder,
     vibe,
     matchScore,

@@ -24,6 +24,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(['vibes']) || isStringList(data.vibes, 12))
         && (!data.keys().hasAny(['seasonTags']) || isStringList(data.seasonTags, 8))
         && (!data.keys().hasAny(['warmth']) || (data.warmth is int && data.warmth >= 1 && data.warmth <= 5))
+        && (!data.keys().hasAny(['formality']) || (data.formality is int && data.formality >= 1 && data.formality <= 5))
         && (!data.keys().hasAny(['favorite']) || data.favorite is bool)
         && (!data.keys().hasAny(['isRainFriendly']) || data.isRainFriendly is bool);
     }

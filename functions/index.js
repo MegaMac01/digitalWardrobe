@@ -12,20 +12,26 @@ const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 // "claude-opus-4-8" for the most capable model.
 const MODEL = "claude-sonnet-4-6";
 
-const SYSTEM_PROMPT = `You are an expert personal stylist building a single outfit from a user's own wardrobe.
+const SYSTEM_PROMPT = `You are an expert personal stylist building a single, well-composed outfit from a user's own wardrobe.
 
-You will receive the wardrobe as a JSON array of items (each with id, type, color, vibes, seasonTags, warmth 1-5, isRainFriendly, favorite, notes) plus context: current weather, the occasion/destination, time of day, the desired vibe, and free-text notes.
+Each wardrobe item is JSON with: id, type, color, vibes, seasonTags, warmth (1-5), formality (1=very casual to 5=formal), isRainFriendly, favorite, notes. You also get context: current weather, the occasion/destination, time of day, the desired vibe, and free-text notes.
 
-Rules:
-- Choose ONLY from the provided wardrobe items. Reference items by their exact "id".
-- Build a complete, wearable outfit: at minimum a top (Shirt), bottom (Pants), and Shoes. Add a Jacket when the weather is cold, wet, or windy, and at most one "Other" accessory when it elevates the look.
-- Match the occasion and time of day for formality (e.g. a work meeting or dinner is dressier than a gym session or beach day).
-- Respect the weather: warmth level should suit the temperature; prefer rain-friendly pieces when it is wet; layer for cold or wind.
-- Honor the requested vibe and any explicit notes from the user.
-- Favor cohesive color pairings and lightly prefer items marked favorite.
-- Never invent items or ids that are not in the wardrobe. If a slot cannot be reasonably filled from the wardrobe, omit it.
+Types and how they layer:
+- Base layer: Shirt. Mid layer: Sweater (sweaters/hoodies/knitwear). Outer: Jacket.
+- Bottom: Pants, Shorts, or Skirt. One-piece: Dress (covers base + bottom on its own).
+- Footwear: Shoes. Accessories: Hat, Bag, Accessory, Other.
 
-Respond ONLY with the structured object: a short catchy outfit name, the chosen item ids, and 2-4 concise bullet reasons explaining why the outfit works for this weather and occasion.`;
+Build the outfit on these principles:
+1. STRUCTURE — Footwear, plus EITHER a base top and a bottom OR a single Dress (never pair a Dress with a separate bottom). Add a Sweater and/or Jacket as layers when it's cold, wet, or windy; keep it to a light single layer when hot.
+2. FORMALITY — Keep every piece within about one level of each other, matched to the occasion/time of day (gym/beach ~1-2, everyday ~2-3, work ~3-4, dinner/event ~4-5). Don't mix a formal piece with very casual ones.
+3. COLOR — Use a tight palette (about 2-3 colors). Anchor with neutrals (black, white, grey, navy, beige, denim, brown), allow at most one bold accent, and prefer harmonious or complementary pairings. Avoid clashing colors and fighting loud patterns.
+4. WEATHER & VIBE — Warmth should suit the temperature; prefer rain-friendly pieces when wet. Honor the requested vibe and the user's notes, and lightly prefer items marked favorite.
+
+Accessories: add 0-2 only when they genuinely complete the look and fit the palette.
+
+Choose ONLY from the provided items, by their exact "id". Never invent items or ids. If a slot can't be filled sensibly, omit it.
+
+Respond ONLY with the structured object: a short catchy outfit name, the chosen item ids, and 2-4 concise reasons grounded in the principles above.`;
 
 const OUTFIT_SCHEMA = {
   type: "object",
@@ -116,7 +122,19 @@ export const suggestOutfit = onCall(
 
 // --- Auto-tagging: look at a clothing photo and return wardrobe tags ---
 
-const GARMENT_TYPES = ["Shirt", "Pants", "Jacket", "Shoes", "Other"];
+const GARMENT_TYPES = [
+  "Shirt",
+  "Dress",
+  "Pants",
+  "Shorts",
+  "Skirt",
+  "Jacket",
+  "Shoes",
+  "Hat",
+  "Bag",
+  "Accessory",
+  "Other",
+];
 const GARMENT_SEASONS = ["Any", "Spring", "Summer", "Autumn", "Winter"];
 const GARMENT_VIBES = [
   "Classic",
@@ -137,9 +155,10 @@ const GARMENT_SCHEMA = {
     seasonTags: { type: "array", items: { type: "string", enum: GARMENT_SEASONS } },
     vibes: { type: "array", items: { type: "string", enum: GARMENT_VIBES } },
     warmth: { type: "integer", enum: [1, 2, 3, 4, 5] },
+    formality: { type: "integer", enum: [1, 2, 3, 4, 5] },
     isRainFriendly: { type: "boolean" },
   },
-  required: ["type", "color", "seasonTags", "vibes", "warmth", "isRainFriendly"],
+  required: ["type", "color", "seasonTags", "vibes", "warmth", "formality", "isRainFriendly"],
   additionalProperties: false,
 };
 
@@ -175,7 +194,7 @@ export const analyzeGarment = onCall(
               },
               {
                 type: "text",
-                text: "Identify this single clothing item for a wardrobe app. Choose the closest type, a simple common color name, the seasons it suits, 1-3 style vibes from the allowed list, a warmth level from 1 (breezy) to 5 (heavy/insulated), and whether it is rain-friendly.",
+                text: "Identify this single clothing item for a wardrobe app. Choose the closest type (Sweater covers sweaters/hoodies/knitwear), a simple common color name, the seasons it suits, 1-3 style vibes from the allowed list, a warmth level from 1 (breezy) to 5 (heavy/insulated), a formality/dressiness from 1 (very casual) to 5 (formal), and whether it is rain-friendly.",
               },
             ],
           },

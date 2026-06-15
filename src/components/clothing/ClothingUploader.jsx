@@ -21,7 +21,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useClothes } from "../../hooks/useClothes";
-import { SEASON_OPTIONS, TYPE_ORDER, VIBE_OPTIONS } from "../../utils/outfitEngine";
+import { FORMALITY_OPTIONS, SEASON_OPTIONS, TYPE_ORDER, VIBE_OPTIONS } from "../../utils/outfitEngine";
 import { analyzeGarment } from "../../utils/aiStylist";
 import { logClientError } from "../../utils/telemetry";
 import { sanitizeText, validateImageFile } from "../../utils/validation";
@@ -95,6 +95,7 @@ function makeEmptyForm() {
     vibes: ["Classic"],
     seasonTags: ["Any"],
     warmth: 3,
+    formality: 3,
     isRainFriendly: false,
     favorite: false,
   };
@@ -185,6 +186,7 @@ export default function ClothingUploader({ onAdded }) {
               : prev.seasonTags,
           vibes: Array.isArray(tags.vibes) && tags.vibes.length ? tags.vibes : prev.vibes,
           warmth: tags.warmth || prev.warmth,
+          formality: tags.formality || prev.formality,
           isRainFriendly:
             typeof tags.isRainFriendly === "boolean" ? tags.isRainFriendly : prev.isRainFriendly,
         }));
@@ -417,6 +419,20 @@ export default function ClothingUploader({ onAdded }) {
                     <MenuItem value="3">3 - Mid</MenuItem>
                     <MenuItem value="4">4 - Warm</MenuItem>
                     <MenuItem value="5">5 - Heavy</MenuItem>
+                  </TextField>
+                  <TextField
+                    select
+                    label="Dressiness"
+                    value={String(form.formality)}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, formality: Number(event.target.value) }))
+                    }
+                  >
+                    {FORMALITY_OPTIONS.map((option) => (
+                      <MenuItem key={option.value} value={String(option.value)}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
                   </TextField>
                   <TextField
                     label="Notes"

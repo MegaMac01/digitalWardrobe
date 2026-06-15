@@ -25,6 +25,7 @@ import Toast from "../layout/Toast";
 import {
   buildOutfitName,
   buildSuggestedOutfit,
+  missingEssentials,
   TYPE_ORDER,
   VIBE_OPTIONS,
 } from "../../utils/outfitEngine";
@@ -82,7 +83,7 @@ export default function OutfitBuilder() {
     }, {});
   }, [clothes, selected]);
 
-  const missingRequired = ["Shirt", "Pants", "Shoes"].filter((type) => !selected[type]);
+  const missingRequired = missingEssentials(selectedItems);
 
   function handleSelect(type, itemId) {
     setSelected((prev) => ({ ...prev, [type]: prev[type] === itemId ? null : itemId }));
