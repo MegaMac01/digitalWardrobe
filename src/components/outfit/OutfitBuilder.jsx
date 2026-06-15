@@ -343,9 +343,9 @@ export default function OutfitBuilder() {
                                 image={item.imageUrl}
                                 alt={item.type}
                                 sx={{
-                                  width: 56,
-                                  height: 56,
-                                  borderRadius: 1,
+                                  width: 104,
+                                  height: 104,
+                                  borderRadius: 1.2,
                                   objectFit: "contain",
                                   ...CHECKER_BG,
                                 }}
