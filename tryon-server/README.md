@@ -105,9 +105,44 @@ VITE_TRYON_SERVER_URL=http://localhost:7860
 
 Then run the app locally (`npm run dev`) and use **See it on me → Generate photoreal**.
 
-> Try-on only works from the **locally-run** app. The deployed HTTPS site can't reach
-> `http://localhost` (browser mixed-content). A future tunnel (cloudflared/ngrok) could
-> bridge that, but it isn't needed for local use.
+Locally that's all you need. For the **deployed (Netlify) site**, see below.
+
+---
+
+## Use it on the live (Netlify) site
+
+The hosted HTTPS site can't reach `http://localhost`, so your server must be exposed
+over public HTTPS with a **tunnel**. We use **ngrok** with a free static domain so the
+URL never changes.
+
+> Try-on on the live site only works **while your PC + CatVTON server + ngrok are all
+> running**. It's photoreal-on-your-own-GPU, so there's no always-on hosted option
+> without paying for a cloud GPU.
+
+**One-time ngrok setup**
+1. Create a free account at https://ngrok.com and install ngrok.
+2. Authenticate: `ngrok config add-authtoken <YOUR_TOKEN>` (from the ngrok dashboard).
+3. In the dashboard → **Domains**, claim your free static domain (e.g.
+   `your-name.ngrok-free.app`).
+
+**Each session** (with the CatVTON server already running on port 7860):
+```powershell
+ngrok http 7860 --domain=your-name.ngrok-free.app
+```
+Leave it running alongside the server.
+
+**Point the live app at it (once):**
+Open the deployed site → **Profile → Try-on server** → paste
+`https://your-name.ngrok-free.app` → **Save**. It's stored in your browser, so no
+rebuild/redeploy is needed.
+
+**Known hurdles** (tell me if you hit one):
+- *ngrok browser-warning page* (free tier): if generation returns HTML instead of an
+  image, ngrok's interstitial is interfering. The Gradio share link (`share=True`
+  already prints a `*.gradio.live` URL) is a no-interstitial fallback — paste that URL
+  instead (it changes each launch).
+- *CORS*: the Gradio server reflects the request origin, so the Netlify origin should be
+  allowed automatically. If you see a CORS error, flag it and we'll adjust the launch.
 
 ---
 

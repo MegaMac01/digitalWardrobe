@@ -2,11 +2,12 @@ import { Client, handle_file } from "@gradio/client";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { storage } from "../firebase";
 import { itemForRole } from "./outfitEngine";
+import { getTryOnServerUrl } from "./tryOnServer";
 
-// Talks to a locally-run CatVTON Gradio server (see tryon-server/README.md).
-// No keys, no cost — it runs on the user's own GPU. Only reachable from the
-// locally-run app (the deployed HTTPS site can't call http://localhost).
-const SERVER_URL = import.meta.env.VITE_TRYON_SERVER_URL || "http://localhost:7860";
+// Talks to a CatVTON Gradio server (see tryon-server/README.md). No keys, no
+// cost — it runs on the user's own GPU. Locally that's http://localhost:7860;
+// for the deployed site, point it at a public HTTPS tunnel (ngrok) via the
+// in-app setting. The URL is resolved at call time from getTryOnServerUrl().
 
 // CatVTON handles one garment category per run, so a full outfit is chained:
 // person -> apply top -> feed result -> apply bottom. A dress is a single run.
@@ -99,7 +100,7 @@ export async function generateTryOn(personUrl, items, { uid, onProgress } = {}) 
 
   let app;
   try {
-    app = await Client.connect(SERVER_URL);
+    app = await Client.connect(getTryOnServerUrl());
   } catch {
     throw new Error("Can't reach your try-on server. Start it (see tryon-server/README.md) and retry.");
   }

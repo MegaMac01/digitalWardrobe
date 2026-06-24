@@ -11,6 +11,7 @@ import {
   CircularProgress,
   Grid,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import { useAuth } from "../hooks/useAuth";
@@ -18,6 +19,7 @@ import { useClothes } from "../hooks/useClothes";
 import { useOutfits } from "../hooks/useOutfits";
 import { useTryOnPhoto } from "../hooks/useTryOnPhoto";
 import { prepareTryOnPhoto } from "../utils/resizeImage";
+import { getTryOnServerUrl, setTryOnServerUrl } from "../utils/tryOnServer";
 import { logClientError } from "../utils/telemetry";
 
 function StatCard({ label, value }) {
@@ -35,6 +37,14 @@ function TryOnPhotoCard() {
   const { photoUrl, loading, uploadPhoto, deletePhoto } = useTryOnPhoto();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [serverUrl, setServerUrl] = useState(getTryOnServerUrl());
+  const [savedUrl, setSavedUrl] = useState(false);
+
+  function saveServerUrl() {
+    setTryOnServerUrl(serverUrl);
+    setServerUrl(getTryOnServerUrl());
+    setSavedUrl(true);
+  }
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
@@ -104,6 +114,31 @@ function TryOnPhotoCard() {
             </Stack>
           </Stack>
         )}
+
+        <Stack spacing={0.8} sx={{ mt: 2.5 }}>
+          <Typography variant="subtitle2">Try-on server</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Where your CatVTON server is reachable. Running locally: leave as
+            http://localhost:7860. On the live site: paste your public tunnel URL (see
+            tryon-server/README.md). Saved in this browser only.
+          </Typography>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mt: 0.5 }}>
+            <TextField
+              size="small"
+              fullWidth
+              label="Server URL"
+              placeholder="https://your-name.ngrok-free.app"
+              value={serverUrl}
+              onChange={(event) => {
+                setServerUrl(event.target.value);
+                setSavedUrl(false);
+              }}
+            />
+            <Button variant="outlined" onClick={saveServerUrl} sx={{ flexShrink: 0 }}>
+              {savedUrl ? "Saved ✓" : "Save"}
+            </Button>
+          </Stack>
+        </Stack>
       </CardContent>
     </Card>
   );
