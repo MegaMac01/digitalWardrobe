@@ -7,6 +7,10 @@ import Anthropic from "@anthropic-ai/sdk";
 // It is never exposed to the client — the key lives only in the function runtime.
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 
+// ModelsLab virtual try-on API key. Set it once with:
+//   firebase functions:secrets:set MODELSLAB_API_KEY
+const MODELSLAB_API_KEY = defineSecret("MODELSLAB_API_KEY");
+
 // This is a frequent, latency-sensitive consumer call. Sonnet 4.6 is a good
 // balance of quality and cost; swap to "claude-haiku-4-5" to go cheaper or
 // "claude-opus-4-8" for the most capable model.
@@ -231,6 +235,82 @@ export const analyzeGarment = onCall(
       }
       console.error("analyzeGarment failed", error);
       throw new HttpsError("internal", "Could not analyze the image.");
+    }
+  }
+);
+
+// --- Photoreal try-on via ModelsLab (tops/bottoms/dresses; no footwear) ---
+
+const MODELSLAB_FASHION = "https://modelslab.com/api/v6/image_editing/fashion";
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Apply one garment to the running model image; returns the result image URL.
+// ModelsLab is async: a "processing" response gives a fetch_result URL to poll.
+async function modelsLabApply(apiKey, modelImage, garmentImage, clothType) {
+  const post = (url, body) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((res) => res.json().catch(() => ({})));
+
+  let data = await post(MODELSLAB_FASHION, {
+    key: apiKey,
+    init_image: modelImage,
+    cloth_image: garmentImage,
+    cloth_type: clothType,
+    num_inference_steps: 31,
+  });
+
+  const deadline = Date.now() + 150000; // up to 2.5 min per item
+  while (data.status === "processing" && data.fetch_result && Date.now() < deadline) {
+    await sleep(Math.min(Math.max((data.eta || 3) * 1000, 2000), 8000));
+    data = await post(data.fetch_result, { key: apiKey });
+  }
+
+  if (data.status === "success") {
+    const out = Array.isArray(data.output) ? data.output[0] : null;
+    if (!out) throw new HttpsError("internal", "Try-on returned no image.");
+    return out;
+  }
+  if (data.status === "error") {
+    console.error("ModelsLab error", data.message);
+    throw new HttpsError("failed-precondition", "Try-on isn't configured (check the API key/credits).");
+  }
+  throw new HttpsError("deadline-exceeded", "The try-on timed out. Try again.");
+}
+
+export const tryOnOutfit = onCall(
+  { secrets: [MODELSLAB_API_KEY], cors: true, timeoutSeconds: 540, memory: "512MiB" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in to try on outfits.");
+    }
+    const { personUrl, products } = request.data || {};
+    if (!personUrl || !Array.isArray(products) || products.length === 0) {
+      throw new HttpsError("invalid-argument", "Need a photo and at least one item.");
+    }
+
+    const apiKey = MODELSLAB_API_KEY.value();
+    // Chain garments: each result becomes the model for the next. Each item is
+    // { url, clothType } where clothType is upper_body | lower_body | dresses.
+    let modelImage = personUrl;
+    for (const product of products.slice(0, 4)) {
+      modelImage = await modelsLabApply(apiKey, modelImage, product.url, product.clothType);
+    }
+
+    // Return the final image as base64 so the client can cache it in Storage
+    // (FASHN's hosted URLs expire after ~72h).
+    try {
+      const finalRes = await fetch(modelImage);
+      const buffer = Buffer.from(await finalRes.arrayBuffer());
+      return {
+        imageBase64: buffer.toString("base64"),
+        mediaType: finalRes.headers.get("content-type") || "image/png",
+      };
+    } catch (error) {
+      console.error("fetch final try-on image failed", error);
+      throw new HttpsError("internal", "Could not retrieve the try-on image.");
     }
   }
 );

@@ -10,6 +10,7 @@ import {
   CardContent,
   CircularProgress,
   Grid,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -19,7 +20,12 @@ import { useClothes } from "../hooks/useClothes";
 import { useOutfits } from "../hooks/useOutfits";
 import { useTryOnPhoto } from "../hooks/useTryOnPhoto";
 import { prepareTryOnPhoto } from "../utils/resizeImage";
-import { getTryOnServerUrl, setTryOnServerUrl } from "../utils/tryOnServer";
+import {
+  getTryOnMode,
+  setTryOnMode,
+  getTryOnServerUrl,
+  setTryOnServerUrl,
+} from "../utils/tryOnServer";
 import { logClientError } from "../utils/telemetry";
 
 function StatCard({ label, value }) {
@@ -37,13 +43,15 @@ function TryOnPhotoCard() {
   const { photoUrl, loading, uploadPhoto, deletePhoto } = useTryOnPhoto();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState(getTryOnMode());
   const [serverUrl, setServerUrl] = useState(getTryOnServerUrl());
-  const [savedUrl, setSavedUrl] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  function saveServerUrl() {
+  function saveSettings() {
+    setTryOnMode(mode);
     setTryOnServerUrl(serverUrl);
     setServerUrl(getTryOnServerUrl());
-    setSavedUrl(true);
+    setSaved(true);
   }
 
   async function handleFile(event) {
@@ -115,27 +123,42 @@ function TryOnPhotoCard() {
           </Stack>
         )}
 
-        <Stack spacing={0.8} sx={{ mt: 2.5 }}>
-          <Typography variant="subtitle2">Try-on server</Typography>
+        <Stack spacing={1} sx={{ mt: 2.5 }}>
+          <Typography variant="subtitle2">Try-on engine</Typography>
           <Typography variant="caption" color="text.secondary">
-            Where your CatVTON server is reachable. Running locally: leave as
-            http://localhost:7860. On the live site: paste your public tunnel URL (see
-            tryon-server/README.md). Saved in this browser only.
+            Local runs on your own machine (free, needs your server running). Cloud uses
+            ModelsLab and works anywhere once funded.
           </Typography>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mt: 0.5 }}>
             <TextField
+              select
               size="small"
-              fullWidth
-              label="Server URL"
-              placeholder="https://your-name.ngrok-free.app"
-              value={serverUrl}
+              label="Mode"
+              value={mode}
               onChange={(event) => {
-                setServerUrl(event.target.value);
-                setSavedUrl(false);
+                setMode(event.target.value);
+                setSaved(false);
               }}
-            />
-            <Button variant="outlined" onClick={saveServerUrl} sx={{ flexShrink: 0 }}>
-              {savedUrl ? "Saved ✓" : "Save"}
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="local">Local (self-hosted, free)</MenuItem>
+              <MenuItem value="cloud">Cloud (ModelsLab)</MenuItem>
+            </TextField>
+            {mode === "local" && (
+              <TextField
+                size="small"
+                fullWidth
+                label="Local server URL"
+                placeholder="http://localhost:7860"
+                value={serverUrl}
+                onChange={(event) => {
+                  setServerUrl(event.target.value);
+                  setSaved(false);
+                }}
+              />
+            )}
+            <Button variant="outlined" onClick={saveSettings} sx={{ flexShrink: 0 }}>
+              {saved ? "Saved ✓" : "Save"}
             </Button>
           </Stack>
         </Stack>

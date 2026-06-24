@@ -78,6 +78,23 @@ When it's up it prints a local URL, usually **http://localhost:7860**.
 
 ---
 
+## Enable the shoe/hat overlay (Storage CORS, one-time)
+
+The models can't render shoes/hats, so the app pastes those cutouts onto the result
+on a `<canvas>`. Drawing your Storage images onto a canvas needs CORS enabled on the
+bucket. Easiest way (no local install): open **Google Cloud Shell**
+(console.cloud.google.com → "Activate Cloud Shell") and run:
+
+```bash
+echo '[{"origin":["*"],"method":["GET"],"maxAgeSeconds":3600,"responseHeader":["Content-Type"]}]' > cors.json
+gsutil cors set cors.json gs://digitalwardrobe-1c867.firebasestorage.app
+```
+
+(`storage-cors.json` in the repo root has the same content.) Until this is set, the
+try-on still works — the shoe/hat overlay is just skipped.
+
+---
+
 ## API shape (verified)
 
 The web app calls the Gradio endpoint **`/submit_function`** with:
