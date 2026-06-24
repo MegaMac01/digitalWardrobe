@@ -17,6 +17,8 @@ const DEFAULT_FILTERS = {
   type: "",
   season: "",
   vibe: "",
+  brand: "",
+  sort: "newest",
   favoritesOnly: false,
 };
 
@@ -26,6 +28,7 @@ function matchFilter(item, filters) {
     !search ||
     item.color?.toLowerCase().includes(search) ||
     item.notes?.toLowerCase().includes(search) ||
+    item.brand?.toLowerCase().includes(search) ||
     item.type?.toLowerCase().includes(search);
   const matchesType = !filters.type || item.type === filters.type;
   const matchesSeason =
@@ -33,9 +36,28 @@ function matchFilter(item, filters) {
     item.seasonTags?.includes("Any") ||
     item.seasonTags?.includes(filters.season);
   const matchesVibe = !filters.vibe || item.vibes?.includes(filters.vibe);
+  const matchesBrand = !filters.brand || item.brand === filters.brand;
   const matchesFavorite = !filters.favoritesOnly || Boolean(item.favorite);
 
-  return matchesSearch && matchesType && matchesSeason && matchesVibe && matchesFavorite;
+  return (
+    matchesSearch && matchesType && matchesSeason && matchesVibe && matchesBrand && matchesFavorite
+  );
+}
+
+// clothes arrive newest-first; only re-sort when a non-default order is chosen.
+// Items missing the sort key sink to the bottom.
+function sortClothes(items, sort) {
+  if (sort === "brand") {
+    return [...items].sort((a, b) =>
+      (a.brand || "￿").localeCompare(b.brand || "￿", undefined, { sensitivity: "base" })
+    );
+  }
+  if (sort === "type") {
+    return [...items].sort((a, b) =>
+      (a.type || "￿").localeCompare(b.type || "￿", undefined, { sensitivity: "base" })
+    );
+  }
+  return items;
 }
 
 export default function ClothingGallery({ onAddItem }) {
@@ -47,8 +69,16 @@ export default function ClothingGallery({ onAddItem }) {
   const { pendingIds, scheduleDelete, undoDelete } = useDeferredDelete(deleteClothing);
 
   const filtered = useMemo(
-    () => clothes.filter((item) => matchFilter(item, filters)),
+    () => sortClothes(clothes.filter((item) => matchFilter(item, filters)), filters.sort),
     [clothes, filters]
+  );
+
+  const brands = useMemo(
+    () =>
+      [...new Set(clothes.map((item) => item.brand).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" })
+      ),
+    [clothes]
   );
 
   // Hide items that are pending deletion so undo can restore them instantly.
@@ -112,6 +142,7 @@ export default function ClothingGallery({ onAddItem }) {
         filters={filters}
         onChange={setFilters}
         onClear={() => setFilters(DEFAULT_FILTERS)}
+        brands={brands}
       />
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.6 }}>
         Showing {visible.length} of {shown.length} pieces

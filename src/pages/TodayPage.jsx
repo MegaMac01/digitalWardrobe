@@ -34,7 +34,7 @@ import { sanitizeText } from "../utils/validation";
 import Loader from "../components/layout/Loader";
 import Toast from "../components/layout/Toast";
 import WeatherIcon from "../components/layout/WeatherIcon";
-import OutfitPreview from "../components/outfit/OutfitPreview";
+import OutfitOnBody from "../components/outfit/OutfitOnBody";
 
 export default function TodayPage() {
   const navigate = useNavigate();
@@ -112,8 +112,7 @@ export default function TodayPage() {
         name: suggestion.name || buildOutfitName(vibe, weather),
         notes: occasion ? `For: ${occasion}` : "Today's pick.",
         vibe,
-        itemIdsByType: suggestion.itemIdsByType,
-        previewOrder: suggestion.previewOrder,
+        itemIds: suggestion.itemIds,
         weatherSnapshot: weather ?? null,
         source: suggestionSource === "ai" ? "ai" : "auto",
         ...(wearToday ? { scheduledDates: [toISODate(new Date())] } : {}),
@@ -350,7 +349,9 @@ export default function TodayPage() {
             <Typography variant="h6" sx={{ mb: 1.5 }}>
               {suggestion.name || buildOutfitName(vibe, weather)}
             </Typography>
-            <OutfitPreview itemIdsByType={suggestion.itemIdsByType} clothesById={clothesById} />
+            <OutfitOnBody
+              items={(suggestion.itemIds || []).map((id) => clothesById[id]).filter(Boolean)}
+            />
           </Card>
 
           <Card sx={{ width: { xs: "100%", md: 320 }, flexShrink: 0, p: 2 }}>

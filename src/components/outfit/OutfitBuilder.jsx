@@ -36,8 +36,10 @@ import {
   buildOutfitName,
   buildSuggestedOutfit,
   missingEssentials,
+  orderItems,
+  itemForRole,
+  accessoriesOf,
   FORMALITY_OPTIONS,
-  TYPE_ORDER,
   TYPE_ROLE,
   VIBE_OPTIONS,
 } from "../../utils/outfitEngine";
@@ -47,6 +49,7 @@ import { logClientError } from "../../utils/telemetry";
 import Loader from "../layout/Loader";
 import EmptyState from "../layout/EmptyState";
 import Toast from "../layout/Toast";
+import OutfitOnBody from "./OutfitOnBody";
 
 // Pieces laid out like a real outfit: layers up top, the body line down the
 // middle (top/dress -> bottom -> shoes), accessories at the foot.
@@ -71,8 +74,8 @@ export default function OutfitBuilder() {
   const { addOutfit } = useOutfits();
   const { weather } = useWeather();
 
-  const [selected, setSelected] = useState({}); // type -> itemId
-  const [locked, setLocked] = useState(() => new Set()); // types
+  const [itemIds, setItemIds] = useState([]); // ordered selected item ids
+  const [locked, setLocked] = useState(() => new Set()); // item ids
   const [vibe, setVibe] = useState("Any");
   const [name, setName] = useState("");
   const [styling, setStyling] = useState(false);
@@ -86,86 +89,82 @@ export default function OutfitBuilder() {
     return map;
   }, [clothes]);
 
-  const selectedItems = useMemo(() => {
-    const map = {};
-    Object.entries(selected).forEach(([type, id]) => {
-      const item = clothesById.get(id);
-      if (item) map[type] = item;
-    });
-    return map;
-  }, [selected, clothesById]);
+  const items = useMemo(
+    () => orderItems(itemIds.map((id) => clothesById.get(id)).filter(Boolean)),
+    [itemIds, clothesById]
+  );
 
-  const itemsList = useMemo(() => Object.values(selectedItems), [selectedItems]);
-  const hasOnepiece = itemsList.some((item) => TYPE_ROLE[item.type] === "onepiece");
-  const missing = missingEssentials(selectedItems);
-  const colors = [...new Set(itemsList.map((item) => item.color).filter(Boolean))];
-  const dressiness = formalityWord(itemsList);
+  const hasOnepiece = items.some((item) => TYPE_ROLE[item.type] === "onepiece");
+  const missing = missingEssentials(items);
+  const colors = [...new Set(items.map((item) => item.color).filter(Boolean))];
+  const dressiness = formalityWord(items);
 
-  function applySelection(itemIdsByType) {
-    const next = {};
-    Object.entries(itemIdsByType).forEach(([type, id]) => {
-      if (id) next[type] = id;
-    });
-    setSelected(next);
+  function applySelection(nextIds) {
+    setItemIds([...nextIds]);
   }
 
-  function setPick(item) {
-    setSelected((prev) => {
-      const next = { ...prev };
-      const role = TYPE_ROLE[item.type];
-      const clearRoles = {
-        onepiece: ["onepiece", "base", "bottom"],
-        base: ["base", "onepiece"],
-        bottom: ["bottom", "onepiece"],
-        mid: ["mid"],
-        outer: ["outer"],
-        footwear: ["footwear"],
-        accessory: [],
-      }[role] ?? [role];
+  // Roles a pick displaces. Structural slots are single; accessories stack.
+  const CLEAR_ROLES = {
+    onepiece: ["onepiece", "base", "bottom"],
+    base: ["base", "onepiece"],
+    bottom: ["bottom", "onepiece"],
+    mid: ["mid"],
+    outer: ["outer"],
+    footwear: ["footwear"],
+    accessory: [],
+  };
 
-      Object.keys(next).forEach((type) => {
-        if (clearRoles.includes(TYPE_ROLE[type])) delete next[type];
+  function setPick(item) {
+    setItemIds((prev) => {
+      const role = TYPE_ROLE[item.type];
+      const clearRoles = CLEAR_ROLES[role] ?? [role];
+
+      let next = prev.filter((id) => {
+        if (id === item.id) return false; // de-dupe; re-added below
+        const existing = clothesById.get(id);
+        return existing ? !clearRoles.includes(TYPE_ROLE[existing.type]) : false;
       });
 
       if (role === "accessory") {
-        const accTypes = Object.keys(next).filter((type) => TYPE_ROLE[type] === "accessory");
-        if (accTypes.length >= 2 && !next[item.type]) delete next[accTypes[0]];
+        const accIds = next.filter((id) => TYPE_ROLE[clothesById.get(id)?.type] === "accessory");
+        if (accIds.length >= 3) {
+          const drop = accIds.find((id) => !locked.has(id)) ?? accIds[0];
+          next = next.filter((id) => id !== drop);
+        }
       }
 
-      next[item.type] = item.id;
-      return next;
+      return [...next, item.id];
     });
     setPicker(null);
   }
 
-  function removeType(type) {
-    setSelected((prev) => {
-      const next = { ...prev };
-      delete next[type];
-      return next;
-    });
+  function removeItem(id) {
+    setItemIds((prev) => prev.filter((x) => x !== id));
     setLocked((prev) => {
       const next = new Set(prev);
-      next.delete(type);
+      next.delete(id);
       return next;
     });
   }
 
-  function toggleLock(type) {
+  function toggleLock(id) {
     setLocked((prev) => {
       const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
+  // Only locks for items still in the look (a displaced pick can leave a stale id).
   function lockedItemIds() {
-    return [...locked].map((type) => selected[type]).filter(Boolean);
+    return [...locked].filter((id) => itemIds.includes(id));
   }
 
   function lockedItemsList() {
-    return [...locked].map((type) => selectedItems[type]).filter(Boolean);
+    return lockedItemIds()
+      .map((id) => clothesById.get(id))
+      .filter(Boolean);
   }
 
   async function handleStyle() {
@@ -176,7 +175,7 @@ export default function OutfitBuilder() {
         weather,
         lockedItemIds: lockedItemIds(),
       });
-      applySelection(suggestion.itemIdsByType);
+      applySelection(suggestion.itemIds);
       if (!name) setName(suggestion.name || buildOutfitName(vibe, weather));
       if (source === "rules") {
         setToast({ open: true, message: "AI stylist unavailable. Used the built-in engine.", severity: "info" });
@@ -188,7 +187,7 @@ export default function OutfitBuilder() {
 
   function handleShuffle() {
     const suggestion = buildSuggestedOutfit(clothes, { vibe, weather, locked: lockedItemsList() });
-    applySelection(suggestion.itemIdsByType);
+    applySelection(suggestion.itemIds);
     if (!name) setName(buildOutfitName(vibe, weather));
   }
 
@@ -209,8 +208,7 @@ export default function OutfitBuilder() {
         name: sanitizeText(name, 60),
         notes: "",
         vibe,
-        itemIdsByType: { ...selected },
-        previewOrder: TYPE_ORDER.filter((type) => selected[type]),
+        itemIds: items.map((item) => item.id),
         weatherSnapshot: weather ?? null,
         source: "builder",
         ...(wearToday ? { scheduledDates: [toISODate(new Date())] } : {}),
@@ -228,8 +226,8 @@ export default function OutfitBuilder() {
     }
   }
 
-  const itemFor = (roles) => itemsList.find((item) => roles.includes(TYPE_ROLE[item.type])) ?? null;
-  const accessoryItems = itemsList.filter((item) => TYPE_ROLE[item.type] === "accessory");
+  const itemFor = (roles) => itemForRole(items, roles);
+  const accessoryItems = accessoriesOf(items);
 
   // One piece in the flat-lay. Tappable to pick/swap; empty shows an add prompt.
   function tile(cfg, item, width, height = width) {
@@ -271,10 +269,10 @@ export default function OutfitBuilder() {
         </ButtonBase>
         <IconButton
           size="small"
-          onClick={() => toggleLock(item.type)}
+          onClick={() => toggleLock(item.id)}
           sx={{ position: "absolute", top: 2, left: 2, p: 0.3, bgcolor: "rgba(255,248,234,0.85)" }}
         >
-          {locked.has(item.type) ? (
+          {locked.has(item.id) ? (
             <LockIcon sx={{ fontSize: 16 }} color="secondary" />
           ) : (
             <LockOpenIcon sx={{ fontSize: 16 }} />
@@ -282,7 +280,7 @@ export default function OutfitBuilder() {
         </IconButton>
         <IconButton
           size="small"
-          onClick={() => removeType(item.type)}
+          onClick={() => removeItem(item.id)}
           sx={{ position: "absolute", top: 2, right: 2, p: 0.3, bgcolor: "rgba(255,248,234,0.85)" }}
         >
           <CloseIcon sx={{ fontSize: 16 }} />
@@ -423,7 +421,7 @@ export default function OutfitBuilder() {
               {accessoryItems.map((item) => (
                 <React.Fragment key={item.id}>{tile(ACC_CFG, item, 96)}</React.Fragment>
               ))}
-              {accessoryItems.length < 2 && tile(ACC_CFG, null, 96)}
+              {accessoryItems.length < 3 && tile(ACC_CFG, null, 96)}
             </Stack>
           </Box>
         </Box>
@@ -431,6 +429,7 @@ export default function OutfitBuilder() {
         {/* Read-out + save */}
         <Box sx={{ width: { xs: "100%", md: 360 }, flexShrink: 0 }}>
           <Card sx={{ p: 2, position: { md: "sticky" }, top: { md: 88 } }}>
+            <OutfitOnBody items={items} compact />
             {weather && (
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 {formatTemp(weather.temperature)} · {weather.label}
@@ -497,7 +496,7 @@ export default function OutfitBuilder() {
               }}
             >
               {pickerItems.map((item) => {
-                const isSelected = selected[item.type] === item.id;
+                const isSelected = itemIds.includes(item.id);
                 return (
                   <Card
                     key={item.id}

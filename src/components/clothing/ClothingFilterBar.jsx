@@ -15,10 +15,12 @@ const EMPTY_FILTERS = {
   type: "",
   season: "",
   vibe: "",
+  brand: "",
+  sort: "newest",
   favoritesOnly: false,
 };
 
-export default function ClothingFilterBar({ filters, onChange, onClear }) {
+export default function ClothingFilterBar({ filters, onChange, onClear, brands = [] }) {
   const activeFilters = filters ?? EMPTY_FILTERS;
 
   return (
@@ -78,6 +80,35 @@ export default function ClothingFilterBar({ filters, onChange, onClear }) {
             {vibe}
           </MenuItem>
         ))}
+      </TextField>
+      {brands.length > 0 && (
+        <TextField
+          select
+          label="Brand"
+          size="small"
+          value={activeFilters.brand}
+          onChange={(event) => onChange({ ...activeFilters, brand: event.target.value })}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {brands.map((brand) => (
+            <MenuItem key={brand} value={brand}>
+              {brand}
+            </MenuItem>
+          ))}
+        </TextField>
+      )}
+      <TextField
+        select
+        label="Sort"
+        size="small"
+        value={activeFilters.sort ?? "newest"}
+        onChange={(event) => onChange({ ...activeFilters, sort: event.target.value })}
+        sx={{ minWidth: 130 }}
+      >
+        <MenuItem value="newest">Newest</MenuItem>
+        <MenuItem value="brand">Brand (A–Z)</MenuItem>
+        <MenuItem value="type">Type</MenuItem>
       </TextField>
       <FormControlLabel
         control={

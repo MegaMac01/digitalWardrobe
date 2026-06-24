@@ -27,7 +27,7 @@ Build the outfit on these principles:
 3. COLOR — Use a tight palette (about 2-3 colors). Anchor with neutrals (black, white, grey, navy, beige, denim, brown), allow at most one bold accent, and prefer harmonious or complementary pairings. Avoid clashing colors and fighting loud patterns.
 4. WEATHER & VIBE — Warmth should suit the temperature; prefer rain-friendly pieces when wet. Honor the requested vibe and the user's notes, and lightly prefer items marked favorite.
 
-Accessories: add 0-2 only when they genuinely complete the look and fit the palette.
+Accessories: add 0-3 only when they genuinely complete the look and fit the palette. You may include more than one of the same kind (e.g. a belt and a necklace) when they work together.
 
 If "lockedItemIds" is non-empty, those items are already chosen by the user: you MUST include every locked id in your result and build the rest of the outfit around them, complementing their color and formality. Do not replace or omit a locked item.
 
@@ -127,8 +127,13 @@ export const suggestOutfit = onCall(
 
 // --- Auto-tagging: look at a clothing photo and return wardrobe tags ---
 
+// Keep this in sync with TYPE_ORDER in src/utils/outfitEngine.js. The two live
+// across a package boundary (this function bundles independently of the web app),
+// so they can't share a module — update both together. "Sweater" must be present
+// or the auto-tagger can never return it, despite the prompt asking for it.
 const GARMENT_TYPES = [
   "Shirt",
+  "Sweater",
   "Dress",
   "Pants",
   "Shorts",
@@ -157,13 +162,18 @@ const GARMENT_SCHEMA = {
   properties: {
     type: { type: "string", enum: GARMENT_TYPES },
     color: { type: "string", description: "A simple common color name, e.g. navy, tan, olive." },
+    brand: {
+      type: "string",
+      description:
+        "The brand name only if a logo or label is clearly legible in the photo; otherwise an empty string. Never guess.",
+    },
     seasonTags: { type: "array", items: { type: "string", enum: GARMENT_SEASONS } },
     vibes: { type: "array", items: { type: "string", enum: GARMENT_VIBES } },
     warmth: { type: "integer", enum: [1, 2, 3, 4, 5] },
     formality: { type: "integer", enum: [1, 2, 3, 4, 5] },
     isRainFriendly: { type: "boolean" },
   },
-  required: ["type", "color", "seasonTags", "vibes", "warmth", "formality", "isRainFriendly"],
+  required: ["type", "color", "brand", "seasonTags", "vibes", "warmth", "formality", "isRainFriendly"],
   additionalProperties: false,
 };
 
@@ -199,7 +209,7 @@ export const analyzeGarment = onCall(
               },
               {
                 type: "text",
-                text: "Identify this single clothing item for a wardrobe app. Choose the closest type (Sweater covers sweaters/hoodies/knitwear), a simple common color name, the seasons it suits, 1-3 style vibes from the allowed list, a warmth level from 1 (breezy) to 5 (heavy/insulated), a formality/dressiness from 1 (very casual) to 5 (formal), and whether it is rain-friendly.",
+                text: "Identify this single clothing item for a wardrobe app. Choose the closest type (Sweater covers sweaters/hoodies/knitwear), a simple common color name, the brand only if a logo or label is clearly legible (otherwise leave brand empty — never guess), the seasons it suits, 1-3 style vibes from the allowed list, a warmth level from 1 (breezy) to 5 (heavy/insulated), a formality/dressiness from 1 (very casual) to 5 (formal), and whether it is rain-friendly.",
               },
             ],
           },

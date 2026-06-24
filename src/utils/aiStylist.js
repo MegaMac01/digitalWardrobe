@@ -1,6 +1,12 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
-import { buildSuggestedOutfit, buildOutfitName, missingEssentials, TYPE_ORDER } from "./outfitEngine";
+import {
+  buildSuggestedOutfit,
+  buildOutfitName,
+  missingEssentials,
+  orderItems,
+  TYPE_ROLE,
+} from "./outfitEngine";
 import { logClientError } from "./telemetry";
 
 const callSuggestOutfit = httpsCallable(functions, "suggestOutfit");
@@ -38,36 +44,46 @@ function toWardrobePayload(clothes) {
 }
 
 // Shape the AI's chosen item ids into the same structure the rule engine returns,
-// so OutfitCard and the save flow can consume either source unchanged.
+// so OutfitPreview and the save flow can consume either source unchanged.
+// Structural slots are single (first id wins; a dress and separate top/bottom are
+// mutually exclusive); accessories may repeat a type, up to three.
 function shapeFromItemIds(itemIds, clothes, { vibe, weather, name, whyItWorks }) {
   const clothesById = new Map(clothes.map((item) => [item.id, item]));
-  const selected = {};
+  const structural = {}; // role -> item
+  const blocked = new Set(); // roles excluded by an earlier pick
+  const accessories = [];
+  const seen = new Set();
 
   itemIds.forEach((id) => {
     const item = clothesById.get(id);
-    if (item && !selected[item.type]) {
-      selected[item.type] = item;
+    if (!item || seen.has(id)) return;
+    const role = TYPE_ROLE[item.type];
+
+    if (role === "accessory") {
+      if (accessories.length < 3) {
+        accessories.push(item);
+        seen.add(id);
+      }
+      return;
+    }
+
+    if (structural[role] || blocked.has(role)) return;
+    structural[role] = item;
+    seen.add(id);
+    if (role === "onepiece") {
+      blocked.add("base");
+      blocked.add("bottom");
+    } else if (role === "base" || role === "bottom") {
+      blocked.add("onepiece");
     }
   });
 
-  const itemIdsByType = TYPE_ORDER.reduce((acc, type) => {
-    acc[type] = selected[type]?.id ?? null;
-    return acc;
-  }, {});
-
-  const itemsByType = TYPE_ORDER.reduce((acc, type) => {
-    acc[type] = selected[type] ?? null;
-    return acc;
-  }, {});
-
-  const previewOrder = TYPE_ORDER.filter((type) => itemIdsByType[type]);
-  const missingRequired = missingEssentials(itemsByType);
+  const orderedItems = orderItems([...Object.values(structural), ...accessories]);
 
   return {
-    itemIdsByType,
-    itemsByType,
-    missingRequired,
-    previewOrder,
+    items: orderedItems,
+    itemIds: orderedItems.map((item) => item.id),
+    missingRequired: missingEssentials(orderedItems),
     vibe,
     name: name || buildOutfitName(vibe, weather),
     whyItWorks: Array.isArray(whyItWorks) ? whyItWorks.slice(0, 6) : [],
@@ -118,7 +134,7 @@ export async function suggestOutfit(
     logClientError(error, { scope: "ai-stylist", action: "suggest-outfit-fallback" });
     return {
       source: "rules",
-      suggestion: buildSuggestedOutfit(clothes, { vibe, weather, locked: lockedItems }),
+      suggestion: buildSuggestedOutfit(clothes, { vibe, weather, occasion, locked: lockedItems }),
     };
   }
 }

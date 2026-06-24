@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local CatVTON try-on server (cloned third-party repo + its venv/weights)
+/CatVTON/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

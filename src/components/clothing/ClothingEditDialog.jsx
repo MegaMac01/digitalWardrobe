@@ -18,6 +18,7 @@ function fromItem(item) {
   return {
     type: item?.type ?? "Shirt",
     color: item?.color ?? "",
+    brand: item?.brand ?? "",
     seasonTags: item?.seasonTags?.length ? item.seasonTags : ["Any"],
     vibes: item?.vibes?.length ? item.vibes : [],
     warmth: item?.warmth ?? 3,
@@ -44,6 +45,7 @@ export default function ClothingEditDialog({ open, item, onClose, onSave }) {
       onSave(item.id, {
         type: form.type,
         color: sanitizeText(form.color, 40),
+        brand: sanitizeText(form.brand, 40),
         seasonTags: form.seasonTags,
         vibes: form.vibes,
         warmth: Number(form.warmth),
@@ -77,6 +79,12 @@ export default function ClothingEditDialog({ open, item, onClose, onSave }) {
             placeholder="Tan, navy, olive..."
             value={form.color}
             onChange={(event) => update({ color: event.target.value })}
+          />
+          <TextField
+            label="Brand"
+            placeholder="Levi's, Nike, Uniqlo..."
+            value={form.brand}
+            onChange={(event) => update({ brand: event.target.value })}
           />
           <TextField
             select

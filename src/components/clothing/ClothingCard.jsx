@@ -47,6 +47,9 @@ export default function ClothingCard({ item, onToggleFavorite, onEdit, onDelete 
           <TinyMeta label="Color" value={item.color} />
         </Box>
         <Box>
+          <TinyMeta label="Brand" value={item.brand} />
+        </Box>
+        <Box>
           <TinyMeta
             label="Season"
             value={item.seasonTags?.length ? item.seasonTags.join(", ") : "Any"}

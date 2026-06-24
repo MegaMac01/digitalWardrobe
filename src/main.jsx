@@ -1,3 +1,9 @@
+// @gradio/client (used for the local try-on server) references Node globals
+// that don't exist in the browser. Polyfill them before anything loads it.
+import { Buffer } from "buffer";
+if (typeof globalThis.Buffer === "undefined") globalThis.Buffer = Buffer;
+if (typeof globalThis.global === "undefined") globalThis.global = globalThis;
+
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";

@@ -7,51 +7,15 @@ import {
   Card,
   CardActions,
   CardContent,
-  CardMedia,
   Chip,
-  Grid,
   IconButton,
   Stack,
   TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { TYPE_ORDER } from "../../utils/outfitEngine";
-
-function OutfitPiece({ type, item }) {
-  return (
-    <Box>
-      <Typography variant="caption" sx={{ fontWeight: 700 }}>
-        {type}
-      </Typography>
-      {item ? (
-        <CardMedia
-          component="img"
-          image={item.imageUrl}
-          alt={type}
-          loading="lazy"
-          decoding="async"
-          sx={{ mt: 0.5, borderRadius: 1.2, aspectRatio: "1 / 1", objectFit: "cover" }}
-        />
-      ) : (
-        <Box
-          sx={{
-            mt: 0.5,
-            borderRadius: 1.2,
-            border: "1px dashed rgba(86,60,41,0.24)",
-            display: "grid",
-            placeItems: "center",
-            aspectRatio: "1 / 1",
-            color: "text.secondary",
-            fontSize: 12,
-          }}
-        >
-          None
-        </Box>
-      )}
-    </Box>
-  );
-}
+import { outfitItemIds, orderItems } from "../../utils/outfitEngine";
+import OutfitOnBody from "./OutfitOnBody";
 
 export default function OutfitCard({
   outfit,
@@ -65,15 +29,15 @@ export default function OutfitCard({
   showScheduleActions = false,
 }) {
   const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().slice(0, 10));
-  const items = outfit.itemIdsByType || outfit.items || {};
   const scheduledDates = useMemo(
     () => [...(outfit.scheduledDates || [])].sort((a, b) => a.localeCompare(b)),
     [outfit.scheduledDates]
   );
 
-  const orderedTypes = outfit.previewOrder?.length ? outfit.previewOrder : TYPE_ORDER;
-  const pieceTypes = orderedTypes.filter((type) => items[type]);
-  const displayTypes = pieceTypes.length > 0 ? pieceTypes : TYPE_ORDER;
+  const pieces = useMemo(() => {
+    const lookup = (id) => (clothesById?.get ? clothesById.get(id) : clothesById?.[id]);
+    return orderItems(outfitItemIds(outfit).map(lookup).filter(Boolean));
+  }, [outfit, clothesById]);
 
   return (
     <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -127,15 +91,9 @@ export default function OutfitCard({
         )}
       </CardContent>
       <CardContent sx={{ pt: 0, flexGrow: 1 }}>
-        <Grid container spacing={1}>
-          {displayTypes.map((type) => (
-            <Grid item xs={4} key={type}>
-              <OutfitPiece type={type} item={clothesById[items[type]]} />
-            </Grid>
-          ))}
-        </Grid>
+        <OutfitOnBody items={pieces} compact />
       </CardContent>
-      <CardActions sx={{ pt: 0 }}>
+      <CardActions sx={{ pt: 0, flexWrap: "wrap", rowGap: 0.5 }}>
         {showSaveAction && (
           <Button size="small" variant="contained" onClick={onSaveSuggestion}>
             Save This Fit

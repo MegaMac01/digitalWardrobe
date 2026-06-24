@@ -13,8 +13,11 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { TYPE_ORDER } from "../../utils/outfitEngine";
+import { TYPE_ORDER, TYPE_ROLE, orderItems, outfitItemIds } from "../../utils/outfitEngine";
 import { sanitizeText, validateOutfitName } from "../../utils/validation";
+
+const MAX_ACCESSORIES = 3;
+const STRUCTURAL_TYPES = TYPE_ORDER.filter((type) => TYPE_ROLE[type] !== "accessory");
 
 function itemLabel(item) {
   const color = item.color ? item.color : "Item";
@@ -25,7 +28,8 @@ function itemLabel(item) {
 export default function OutfitEditDialog({ open, outfit, clothes, onClose, onSave }) {
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
-  const [selected, setSelected] = useState({});
+  const [structural, setStructural] = useState({}); // structural type -> id ("" = none)
+  const [accessoryIds, setAccessoryIds] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -35,6 +39,11 @@ export default function OutfitEditDialog({ open, outfit, clothes, onClose, onSav
       return acc;
     }, {});
   }, [clothes]);
+
+  const accessoryOptions = useMemo(
+    () => clothes.filter((item) => TYPE_ROLE[item.type] === "accessory"),
+    [clothes]
+  );
 
   const clothesById = useMemo(() => {
     const map = {};
@@ -49,15 +58,19 @@ export default function OutfitEditDialog({ open, outfit, clothes, onClose, onSav
     if (!outfit) return;
     setName(outfit.name ?? "");
     setNotes(outfit.notes ?? "");
-    const items = outfit.itemIdsByType || {};
-    setSelected(
-      TYPE_ORDER.reduce((acc, type) => {
-        acc[type] = items[type] ?? "";
-        return acc;
-      }, {})
-    );
+    const struct = {};
+    const accs = [];
+    outfitItemIds(outfit)
+      .map((id) => clothesById[id])
+      .filter(Boolean)
+      .forEach((item) => {
+        if (TYPE_ROLE[item.type] === "accessory") accs.push(item.id);
+        else if (!struct[item.type]) struct[item.type] = item.id;
+      });
+    setStructural(struct);
+    setAccessoryIds(accs.slice(0, MAX_ACCESSORIES));
     setError("");
-  }, [outfit]);
+  }, [outfit, clothesById]);
 
   function handleSave() {
     const nameError = validateOutfitName(name);
@@ -66,18 +79,18 @@ export default function OutfitEditDialog({ open, outfit, clothes, onClose, onSav
       return;
     }
 
-    const itemIdsByType = TYPE_ORDER.reduce((acc, type) => {
-      acc[type] = selected[type] || null;
-      return acc;
-    }, {});
+    const chosenIds = [
+      ...STRUCTURAL_TYPES.map((type) => structural[type]).filter(Boolean),
+      ...accessoryIds,
+    ];
 
-    if (!TYPE_ORDER.some((type) => itemIdsByType[type])) {
+    if (chosenIds.length === 0) {
       setError("Pick at least one item.");
       return;
     }
 
-    const previewOrder = (outfit.previewOrder?.length ? outfit.previewOrder : TYPE_ORDER).filter(
-      (type) => itemIdsByType[type]
+    const itemIds = orderItems(chosenIds.map((id) => clothesById[id]).filter(Boolean)).map(
+      (item) => item.id
     );
 
     setSaving(true);
@@ -85,8 +98,7 @@ export default function OutfitEditDialog({ open, outfit, clothes, onClose, onSav
       onSave(outfit.id, {
         name: sanitizeText(name, 60),
         notes: sanitizeText(notes, 240),
-        itemIdsByType,
-        previewOrder,
+        itemIds,
       })
     ).finally(() => setSaving(false));
   }
@@ -113,9 +125,9 @@ export default function OutfitEditDialog({ open, outfit, clothes, onClose, onSav
           />
 
           <Grid container spacing={1.2}>
-            {TYPE_ORDER.map((type) => {
+            {STRUCTURAL_TYPES.map((type) => {
               const options = groupedByType[type] ?? [];
-              const chosen = selected[type] ? clothesById[selected[type]] : null;
+              const chosen = structural[type] ? clothesById[structural[type]] : null;
               return (
                 <Grid item xs={12} sm={6} key={type}>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -141,9 +153,9 @@ export default function OutfitEditDialog({ open, outfit, clothes, onClose, onSav
                       select
                       label={type}
                       size="small"
-                      value={selected[type] ?? ""}
+                      value={structural[type] ?? ""}
                       onChange={(event) =>
-                        setSelected((prev) => ({ ...prev, [type]: event.target.value }))
+                        setStructural((prev) => ({ ...prev, [type]: event.target.value }))
                       }
                       fullWidth
                       disabled={options.length === 0}
@@ -160,6 +172,34 @@ export default function OutfitEditDialog({ open, outfit, clothes, onClose, onSav
                 </Grid>
               );
             })}
+
+            <Grid item xs={12}>
+              <TextField
+                select
+                SelectProps={{ multiple: true }}
+                label={`Accessories (up to ${MAX_ACCESSORIES})`}
+                size="small"
+                value={accessoryIds}
+                onChange={(event) => {
+                  const value =
+                    typeof event.target.value === "string"
+                      ? event.target.value.split(",")
+                      : event.target.value;
+                  setAccessoryIds(value.slice(0, MAX_ACCESSORIES));
+                }}
+                fullWidth
+                disabled={accessoryOptions.length === 0}
+                helperText={
+                  accessoryOptions.length === 0 ? "No accessories in wardrobe" : undefined
+                }
+              >
+                {accessoryOptions.map((item) => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.type} · {itemLabel(item)}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
           </Grid>
 
           {error && (

@@ -1,34 +1,28 @@
 import React from "react";
 import { Box, Stack } from "@mui/material";
-import { TYPE_ORDER, TYPE_ROLE } from "../../utils/outfitEngine";
+import { TYPE_ROLE, itemForRole, accessoriesOf } from "../../utils/outfitEngine";
 
 // Read-only flat-lay of an outfit, top-of-body to bottom, accessories at the
 // foot. Pieces are background-free cutouts drawn "contain" at a consistent
-// size, so any number of pieces stays balanced. Expects itemIdsByType
-// (type -> id) and a clothesById object/Map.
-export default function OutfitPreview({ itemIdsByType = {}, clothesById }) {
+// size, so any number of pieces stays balanced. Accepts either a resolved
+// `items` array or an `itemIds` array plus a `clothesById` object/Map.
+export default function OutfitPreview({ items, itemIds = [], clothesById }) {
   const lookup = (id) => (clothesById?.get ? clothesById.get(id) : clothesById?.[id]) ?? null;
+  const resolved = items ?? itemIds.map(lookup).filter(Boolean);
 
-  const itemForRoles = (roles) => {
-    const type = TYPE_ORDER.find((t) => roles.includes(TYPE_ROLE[t]) && itemIdsByType[t]);
-    return type ? lookup(itemIdsByType[type]) : null;
-  };
-
-  const top = itemForRoles(["base", "onepiece"]);
+  const top = itemForRole(resolved, ["base", "onepiece"]);
   const isDress = top && TYPE_ROLE[top.type] === "onepiece";
 
   // Main pieces, in the order you'd see them on the body.
   const mainPieces = [
-    itemForRoles(["outer"]),
-    itemForRoles(["mid"]),
+    itemForRole(resolved, ["outer"]),
+    itemForRole(resolved, ["mid"]),
     top,
-    isDress ? null : itemForRoles(["bottom"]),
-    itemForRoles(["footwear"]),
+    isDress ? null : itemForRole(resolved, ["bottom"]),
+    itemForRole(resolved, ["footwear"]),
   ].filter(Boolean);
 
-  const accessories = TYPE_ORDER.filter((t) => TYPE_ROLE[t] === "accessory" && itemIdsByType[t])
-    .map((t) => lookup(itemIdsByType[t]))
-    .filter(Boolean);
+  const accessories = accessoriesOf(resolved);
 
   return (
     <Box sx={{ maxWidth: 320, mx: "auto" }}>

@@ -20,6 +20,7 @@ service cloud.firestore {
         && isString(data.storagePath, 240)
         && data.createdAtMs is int
         && (!data.keys().hasAny(['color']) || isString(data.color, 40))
+        && (!data.keys().hasAny(['brand']) || isString(data.brand, 40))
         && (!data.keys().hasAny(['notes']) || isString(data.notes, 280))
         && (!data.keys().hasAny(['vibes']) || isStringList(data.vibes, 12))
         && (!data.keys().hasAny(['seasonTags']) || isStringList(data.seasonTags, 8))
@@ -30,10 +31,15 @@ service cloud.firestore {
     }
 
     function validOutfitData(data) {
-      return data.keys().hasAll(['name', 'itemIdsByType', 'createdAtMs'])
+      return data.keys().hasAll(['name', 'createdAtMs'])
         && isString(data.name, 60)
-        && data.itemIdsByType is map
         && data.createdAtMs is int
+        // New outfits store an ordered `itemIds` list; legacy ones a type-keyed
+        // map. Accept either so old outfits can still be scheduled/edited.
+        && (
+          (data.keys().hasAny(['itemIds']) && isStringList(data.itemIds, 20))
+          || (data.keys().hasAny(['itemIdsByType']) && data.itemIdsByType is map)
+        )
         && (!data.keys().hasAny(['notes']) || isString(data.notes, 280))
         && (!data.keys().hasAny(['vibe']) || isString(data.vibe, 24))
         && (!data.keys().hasAny(['previewOrder']) || isStringList(data.previewOrder, 8))

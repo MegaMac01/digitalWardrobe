@@ -40,9 +40,11 @@ export const FORMALITY_OPTIONS = [
 ];
 
 // A wearable outfit needs footwear, plus either a base top and a bottom, or a
-// one-piece dress. Returns human-readable phrases for what's missing.
-export function missingEssentials(itemsByType) {
-  const has = (role) => TYPE_ORDER.some((type) => TYPE_ROLE[type] === role && itemsByType[type]);
+// one-piece dress. Takes a flat array of items. Returns human-readable phrases
+// for what's missing.
+export function missingEssentials(items) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : Object.values(items ?? {}).filter(Boolean);
+  const has = (role) => list.some((item) => TYPE_ROLE[item.type] === role);
   const missing = [];
   const hasBase = has("base");
   const hasBottom = has("bottom");
@@ -53,6 +55,37 @@ export function missingEssentials(itemsByType) {
   }
   if (!has("footwear")) missing.push("shoes");
   return missing;
+}
+
+// Render/layer order for a set of items: outer -> mid -> top/dress -> bottom ->
+// shoes -> accessories, with TYPE_ORDER as the tiebreak within a rank.
+const RENDER_ROLE_RANK = { outer: 0, mid: 1, onepiece: 2, base: 2, bottom: 3, footwear: 4, accessory: 5 };
+
+export function orderItems(items) {
+  return [...items].filter(Boolean).sort((a, b) => {
+    const ra = RENDER_ROLE_RANK[TYPE_ROLE[a.type]] ?? 9;
+    const rb = RENDER_ROLE_RANK[TYPE_ROLE[b.type]] ?? 9;
+    if (ra !== rb) return ra - rb;
+    return TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type);
+  });
+}
+
+// The first item playing one of the given layer roles (structural slots are single).
+export function itemForRole(items, roles) {
+  return orderItems(items).find((item) => roles.includes(TYPE_ROLE[item.type])) ?? null;
+}
+
+export function accessoriesOf(items) {
+  return items.filter((item) => item && TYPE_ROLE[item.type] === "accessory");
+}
+
+// Canonical ordered item ids for an outfit. Prefers the new `itemIds` array;
+// falls back to the legacy type-keyed map for outfits saved before that change.
+export function outfitItemIds(outfit) {
+  if (Array.isArray(outfit?.itemIds)) return outfit.itemIds.filter(Boolean);
+  const map = outfit?.itemIdsByType ?? {};
+  const order = outfit?.previewOrder?.length ? outfit.previewOrder : TYPE_ORDER;
+  return order.map((type) => map[type]).filter(Boolean);
 }
 
 export const VIBE_OPTIONS = [
@@ -222,8 +255,21 @@ function scoreForColorHarmony(itemFamily, selectedItems, colorFamilyCache) {
   return { score, reasons };
 }
 
+// Map an occasion/destination to a target dressiness (1 casual - 5 formal), so
+// the rule engine honors the occasion even when the AI stylist is unavailable.
+// Returns null for occasions we can't confidently classify (no bias applied).
+export function formalityTargetFor(occasion) {
+  const o = String(occasion ?? "").toLowerCase();
+  if (!o) return null;
+  if (/gym|workout|run|jog|yoga|hike|beach|pool|swim/.test(o)) return 1.5;
+  if (/dinner|date|night out|nightout|event|wedding|formal|cocktail|gala|party|theat|opera/.test(o)) return 4.5;
+  if (/work|office|interview|business|meeting|conference|presentation/.test(o)) return 3.5;
+  if (/casual|errand|everyday|home|park|coffee|grocery|walk|brunch/.test(o)) return 2.5;
+  return null;
+}
+
 // season and colorFamilyCache are pre-computed once per buildSuggestedOutfit call.
-function scoreItem(item, { vibe, weather, selectedItems, season, colorFamilyCache }) {
+function scoreItem(item, { vibe, weather, selectedItems, season, colorFamilyCache, formalityTarget }) {
   let score = 10;
   const reasons = [];
   const itemVibes = item.vibes ?? [];
@@ -274,6 +320,19 @@ function scoreItem(item, { vibe, weather, selectedItems, season, colorFamilyCach
     }
   }
 
+  // Occasion-driven dressiness: pull picks toward the target the occasion implies.
+  if (formalityTarget != null) {
+    const targetDiff = Math.abs(Number(item.formality ?? 3) - formalityTarget);
+    if (targetDiff <= 0.5) {
+      score += 5;
+      reasons.push("Dressiness suits the occasion.");
+    } else if (targetDiff <= 1.5) {
+      score += 2;
+    } else if (targetDiff >= 2.5) {
+      score -= 5;
+    }
+  }
+
   const uniqueReasons = [...new Set(reasons)];
   return { score, reasons: uniqueReasons.slice(0, 3) };
 }
@@ -293,7 +352,7 @@ function pickBestItem(items, context, usedIds, selectedItems) {
   return pick ?? null;
 }
 
-function buildWhyItWorks(explanationsByType, vibe, weather) {
+function buildWhyItWorks(explanationGroups, vibe, weather) {
   const reasons = [];
 
   if (vibe && vibe !== "Any") {
@@ -312,46 +371,64 @@ function buildWhyItWorks(explanationsByType, vibe, weather) {
     }
   }
 
-  Object.values(explanationsByType).forEach((typeReasons) => {
-    typeReasons.forEach((reason) => reasons.push(reason));
+  explanationGroups.forEach((group) => {
+    group.forEach((reason) => reasons.push(reason));
   });
 
   return [...new Set(reasons)].slice(0, 6);
 }
 
-export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null, locked = [] } = {}) {
+export function buildSuggestedOutfit(
+  clothes,
+  { vibe = "Any", weather = null, occasion = "", locked = [] } = {}
+) {
   // Pre-compute once so scoreItem and scoreForColorHarmony don't repeat this work per candidate.
   const season = getCurrentSeason();
   const colorFamilyCache = new Map(clothes.map((item) => [item.id, getColorFamily(item.color)]));
-  const context = { vibe, weather, season, colorFamilyCache };
+  const formalityTarget = formalityTargetFor(occasion);
+  const context = { vibe, weather, season, colorFamilyCache, formalityTarget };
 
   const byRole = (role) => clothes.filter((item) => TYPE_ROLE[item.type] === role);
 
-  const selected = {}; // type -> item
+  const selected = {}; // structural slots: type -> item (one per type)
+  const accessories = []; // accessory-role items (multiple, same type allowed)
   const usedIds = new Set();
-  const explanationsByType = {};
+  const explanationGroups = [];
   let matchScore = 0;
+
+  // Everything chosen so far, for color/formality cohesion scoring.
+  const chosen = () => [...Object.values(selected), ...accessories];
 
   // Pre-place any locked items, so we build the rest of the outfit around them.
   locked.forEach((item) => {
-    if (item?.id) {
-      selected[item.type] = item;
-      usedIds.add(item.id);
-    }
+    if (!item?.id || usedIds.has(item.id)) return;
+    usedIds.add(item.id);
+    if (TYPE_ROLE[item.type] === "accessory") accessories.push(item);
+    else selected[item.type] = item;
   });
 
-  const roleFilled = (role) =>
-    TYPE_ORDER.some((type) => TYPE_ROLE[type] === role && selected[type]);
+  const roleFilled = (role) => chosen().some((item) => TYPE_ROLE[item.type] === role);
+
+  function record(result) {
+    usedIds.add(result.item.id);
+    explanationGroups.push(result.reasons ?? []);
+    matchScore += result.score ?? 0;
+  }
 
   function take(items) {
-    const result = pickBestItem(items, context, usedIds, selected);
+    const result = pickBestItem(items, context, usedIds, chosen());
     if (!result?.item?.id) return null;
-    const { item } = result;
-    selected[item.type] = item;
-    usedIds.add(item.id);
-    explanationsByType[item.type] = result.reasons ?? [];
-    matchScore += result.score ?? 0;
-    return item;
+    selected[result.item.type] = result.item;
+    record(result);
+    return result.item;
+  }
+
+  function takeAccessory(items) {
+    const result = pickBestItem(items, context, usedIds, chosen());
+    if (!result?.item?.id) return null;
+    accessories.push(result.item);
+    record(result);
+    return result.item;
   }
 
   const bases = byRole("base");
@@ -390,36 +467,24 @@ export function buildSuggestedOutfit(clothes, { vibe = "Any", weather = null, lo
     take(byRole("outer"));
   }
 
-  // Finish with up to two accessories (counting any locked), each a different type.
-  const accessoryCount = () =>
-    Object.keys(selected).filter((type) => TYPE_ROLE[type] === "accessory").length;
-  if (accessoryCount() < 2) {
-    const pool = byRole("accessory").filter((item) => !selected[item.type]);
-    if (pool.length > 0 && Math.random() < 0.55) take(pool);
-  }
-  if (accessoryCount() < 2) {
-    const pool = byRole("accessory").filter((item) => !selected[item.type]);
-    if (pool.length > 0 && Math.random() < 0.3) take(pool);
-  }
-
-  const itemIdsByType = {};
-  const itemsByType = {};
-  Object.entries(selected).forEach(([type, item]) => {
-    itemIdsByType[type] = item.id;
-    itemsByType[type] = item;
+  // Finish with up to three accessories (counting any locked); duplicates of a
+  // kind are allowed (e.g. two Accessory items), with diminishing likelihood.
+  const accessoryPool = () => byRole("accessory").filter((item) => !usedIds.has(item.id));
+  [0.55, 0.3, 0.15].forEach((probability) => {
+    if (accessories.length >= 3) return;
+    const pool = accessoryPool();
+    if (pool.length > 0 && Math.random() < probability) takeAccessory(pool);
   });
 
-  const previewOrder = TYPE_ORDER.filter((type) => itemIdsByType[type]);
+  const orderedItems = orderItems(chosen());
 
   return {
-    itemIdsByType,
-    itemsByType,
-    missingRequired: missingEssentials(selected),
-    previewOrder,
+    items: orderedItems,
+    itemIds: orderedItems.map((item) => item.id),
+    missingRequired: missingEssentials(orderedItems),
     vibe,
     matchScore,
-    explanationsByType,
-    whyItWorks: buildWhyItWorks(explanationsByType, vibe, weather),
+    whyItWorks: buildWhyItWorks(explanationGroups, vibe, weather),
     generatedAt: Date.now(),
   };
 }

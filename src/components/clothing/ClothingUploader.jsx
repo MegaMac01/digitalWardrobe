@@ -92,6 +92,7 @@ function makeEmptyForm() {
   return {
     type: "Shirt",
     color: "",
+    brand: "",
     notes: "",
     vibes: ["Classic"],
     seasonTags: ["Any"],
@@ -181,6 +182,7 @@ export default function ClothingUploader({ onAdded }) {
           ...prev,
           type: tags.type || prev.type,
           color: tags.color ?? prev.color,
+          brand: tags.brand ? tags.brand : prev.brand,
           seasonTags:
             Array.isArray(tags.seasonTags) && tags.seasonTags.length
               ? tags.seasonTags
@@ -225,6 +227,7 @@ export default function ClothingUploader({ onAdded }) {
         file: processedFile,
         ...form,
         color: sanitizeText(form.color, 40),
+        brand: sanitizeText(form.brand, 40),
         notes: sanitizeText(form.notes, 280),
       });
       setRawFile(null);
@@ -386,6 +389,12 @@ export default function ClothingUploader({ onAdded }) {
                     placeholder="Tan, navy, olive..."
                     value={form.color}
                     onChange={(event) => setForm((prev) => ({ ...prev, color: event.target.value }))}
+                  />
+                  <TextField
+                    label="Brand"
+                    placeholder="Levi's, Nike, Uniqlo..."
+                    value={form.brand}
+                    onChange={(event) => setForm((prev) => ({ ...prev, brand: event.target.value }))}
                   />
                   <TextField
                     select

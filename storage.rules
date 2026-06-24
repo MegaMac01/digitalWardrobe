@@ -13,6 +13,11 @@ service firebase.storage {
       allow read, write: if isOwner(uid);
     }
 
+    // Full-body photo + cached photoreal try-on results, owner-only.
+    match /tryon/{uid}/{allPaths=**} {
+      allow read, write: if isOwner(uid);
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
